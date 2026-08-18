@@ -1,0 +1,1 @@
+"""ResumeAI Application Package."""
