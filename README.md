@@ -42,13 +42,25 @@ ResumeAI is an ML/NLP-powered Resume-to-Job Intelligence Platform designed to ex
   - Experience Fit: **10%**
   > **Note on Initial Baseline Weights**: The default weights are initial configurable baseline heuristic assumptions and will require empirical evaluation and tuning against real-world candidate benchmark data in future iterations.
 
+### 6. ML Role Classification Service v1
+- Predicts a candidate's likely job role category (across 24 taxonomy categories) using a trained **TF-IDF + Logistic Regression** machine learning pipeline.
+- Loads the pre-trained pipeline artifact (`models/role_classifier.joblib`) via lazy singleton loading to prevent retraining or reloading per request.
+- **Baseline Evaluation Results**:
+  - **Test Accuracy**: **64.79%** (`0.6479`)
+  - **Macro F1 Score**: **0.60**
+  - **Weighted F1 Score**: **0.63**
+  > **Note on Baseline Results**: These metrics represent baseline evaluation results on the dataset (`opensporks/resumes`, 2,481 usable resumes) and serve as a baseline benchmark for future iterative improvements.
+
 ## Project Structure
 
 ```
 ResumeAI/
-├── .gitignore          # Git ignore rules for Python, virtualenv, macOS, and IDEs
+├── .gitignore          # Git ignore rules for Python, virtualenv, macOS, IDEs, and model artifacts
 ├── README.md           # Project documentation and quickstart guide
 ├── requirements.txt    # Application dependencies
+├── ml_training.py      # Offline model training & evaluation script
+├── models/
+│   └── role_classifier.joblib  # Serialized scikit-learn pipeline artifact (git-ignored)
 ├── app/
 │   ├── __init__.py     # ResumeAI package marker
 │   ├── main.py         # FastAPI application entry point
@@ -61,7 +73,8 @@ ResumeAI/
 │   │       ├── skill.py      # Skill extraction endpoint
 │   │       ├── job.py        # Job description processing endpoint
 │   │       ├── similarity.py # Semantic similarity endpoint
-│   │       └── match.py      # Resume to job matching endpoint
+│   │       ├── match.py      # Resume to job matching endpoint
+│   │       └── role.py       # ML Role classification endpoint
 │   ├── core/
 │   │   ├── __init__.py
 │   │   ├── config.py   # Application settings & environment configuration
@@ -72,7 +85,8 @@ ResumeAI/
 │   │   ├── skill.py      # Pydantic schemas for skill extraction
 │   │   ├── job.py        # Pydantic schemas for job description processing
 │   │   ├── similarity.py # Pydantic schemas for semantic similarity
-│   │   └── match.py      # Pydantic schemas for matching engine
+│   │   ├── match.py      # Pydantic schemas for matching engine
+│   │   └── role.py       # Pydantic schemas for role classification
 │   └── services/
 │       ├── __init__.py
 │       ├── document_parser.py   # Modular PDF & DOCX text extraction service
@@ -80,7 +94,8 @@ ResumeAI/
 │       ├── skill_extractor.py   # Rule/taxonomy-based skill extraction engine
 │       ├── job_processor.py     # Job description requirements processing service
 │       ├── similarity_service.py# Sentence Transformer semantic similarity service
-│       └── matching_engine.py   # Explainable resume to job matching engine
+│       ├── matching_engine.py   # Explainable resume to job matching engine
+│       └── role_classifier.py   # Serialized ML pipeline role classification service
 └── tests/
     ├── __init__.py
     ├── conftest.py               # Test client & sample document byte fixtures
@@ -93,7 +108,9 @@ ResumeAI/
     ├── test_similarity_service.py# Unit tests for similarity service
     ├── test_similarity_api.py    # Integration tests for similarity API
     ├── test_matching_engine.py   # Unit tests for matching engine service
-    └── test_match_api.py         # Integration tests for matching API
+    ├── test_match_api.py         # Integration tests for matching API
+    ├── test_role_classifier.py   # Unit tests for role classifier service
+    └── test_role_api.py          # Integration tests for role prediction API
 ```
 
 ## Quickstart Guide
@@ -112,86 +129,46 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Run the Backend Server
+### 4. Train Model Artifact (Offline Script)
+```bash
+python ml_training.py
+```
+This trains the model pipeline and serializes it to `models/role_classifier.joblib`.
+
+### 5. Run the Backend Server
 ```bash
 uvicorn app.main:app --reload --port 8000
 ```
 The server will start at `http://127.0.0.1:8000`.
 
-### 5. Run Automated Tests
+### 6. Run Automated Tests
 ```bash
 pytest -v
 ```
 
-### 6. Test Endpoints
+### 7. Test Endpoints
 - **Health Check**: `GET http://127.0.0.1:8000/health` or `GET http://127.0.0.1:8000/api/v1/health`
 - **Resume Parse Endpoint**: `POST http://127.0.0.1:8000/api/v1/resume/parse`
 - **Skill Extraction Endpoint**: `POST http://127.0.0.1:8000/api/v1/resume/skills`
 - **Job Description Processing Endpoint**: `POST http://127.0.0.1:8000/api/v1/job-description/process`
 - **Semantic Similarity Endpoint**: `POST http://127.0.0.1:8000/api/v1/similarity`
 - **Resume ↔ Job Match Endpoint**: `POST http://127.0.0.1:8000/api/v1/match`
+- **ML Role Classification Endpoint**: `POST http://127.0.0.1:8000/api/v1/role/predict`
 - **Interactive OpenAPI Documentation**: `http://127.0.0.1:8000/docs`
 
-#### Sample Resume ↔ Job Match Request (`curl`):
+#### Sample ML Role Classification Request (`curl`):
 ```bash
-curl -X POST "http://127.0.0.1:8000/api/v1/match" \
+curl -X POST "http://127.0.0.1:8000/api/v1/role/predict" \
      -H "Content-Type: application/json" \
      -d '{
-       "resume": {
-         "skills": ["Python", "FastAPI", "PostgreSQL"],
-         "extracted_skills": [
-           {
-             "skill": "Python",
-             "matched_alias": "Python",
-             "category": "Programming Languages",
-             "evidence": "5 years of Python development experience."
-           }
-         ],
-         "candidate_experience_years": 5
-       },
-       "job": {
-         "job_title": "Senior Python Backend Engineer",
-         "required_skills": ["Python", "PostgreSQL"],
-         "preferred_skills": ["Docker"],
-         "minimum_experience_years": 3,
-         "requirements": [
-           {
-             "skill": "Python",
-             "requirement_type": "required",
-             "evidence": "Minimum 3 years of Python backend engineering."
-           }
-         ]
-       }
+       "text": "Experienced Senior Software Engineer proficient in Python, C++, distributed microservices architecture, and Linux kernel development."
      }'
 ```
 
 #### Sample Response:
 ```json
 {
-  "overall_score": 92.5,
-  "matched_required_skills": [
-    "Python",
-    "PostgreSQL"
-  ],
-  "missing_required_skills": [],
-  "matched_preferred_skills": [],
-  "missing_preferred_skills": [
-    "Docker"
-  ],
-  "experience_assessment": {
-    "required_years": 3,
-    "candidate_years": 5,
-    "meets_requirement": true,
-    "status": "matched"
-  },
-  "semantic_evidence_matches": [
-    {
-      "requirement_skill": "Python",
-      "requirement_evidence": "Minimum 3 years of Python backend engineering.",
-      "best_matching_resume_evidence": "5 years of Python development experience.",
-      "similarity_score": 0.8124
-    }
-  ],
-  "summary": "Overall Match Score: 92.5/100. Matched all required skills (Python, PostgreSQL). Matched 0/1 preferred skills. Candidate meets minimum experience requirement (5y vs 3y required)."
+  "predicted_role": "ENGINEERING",
+  "confidence": 0.0791
 }
 ```

@@ -42,3 +42,8 @@ env/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# ML Model Artifacts & Datasets
+models/
+*.joblib
+*.csv
