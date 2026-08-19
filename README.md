@@ -24,6 +24,12 @@ ResumeAI is an ML/NLP-powered Resume-to-Job Intelligence Platform designed to ex
 - Extracts numeric minimum years of experience using pattern matching (e.g. `2+ years`, `3-5 years`, `minimum 4 years`).
 - Generates sentence-level evidence snippets for each requirement.
 
+### 4. Semantic Similarity Service v1
+- Computes dense vector embeddings and cosine similarity between text strings using `sentence-transformers`.
+- Uses pre-trained model **`all-MiniLM-L6-v2`** to capture semantic meaning beyond exact keyword matching (e.g., matching "Built REST APIs using FastAPI" with "Developed backend services").
+- Leverages a lazy singleton pattern to load model weights once and reuse them across requests.
+- Returns normalized similarity scores (`0.0` to `1.0`) with graceful handling for empty/whitespace inputs.
+
 ## Project Structure
 
 ```
@@ -38,34 +44,39 @@ ResumeAI/
 │   │   ├── __init__.py
 │   │   └── v1/
 │   │       ├── __init__.py
-│   │       ├── health.py # Health check endpoints
-│   │       ├── resume.py # Resume upload and parsing endpoint
-│   │       ├── skill.py  # Skill extraction endpoint
-│   │       └── job.py    # Job description processing endpoint
+│   │       ├── health.py     # Health check endpoints
+│   │       ├── resume.py     # Resume upload and parsing endpoint
+│   │       ├── skill.py      # Skill extraction endpoint
+│   │       ├── job.py        # Job description processing endpoint
+│   │       └── similarity.py # Semantic similarity endpoint
 │   ├── core/
 │   │   ├── __init__.py
 │   │   ├── config.py   # Application settings & environment configuration
 │   │   └── taxonomy.py # Controlled skill taxonomy & alias dictionary
 │   ├── schemas/
 │   │   ├── __init__.py
-│   │   ├── resume.py   # Pydantic schemas for document parsing
-│   │   ├── skill.py    # Pydantic schemas for skill extraction
-│   │   └── job.py      # Pydantic schemas for job description processing
+│   │   ├── resume.py     # Pydantic schemas for document parsing
+│   │   ├── skill.py      # Pydantic schemas for skill extraction
+│   │   ├── job.py        # Pydantic schemas for job description processing
+│   │   └── similarity.py # Pydantic schemas for semantic similarity
 │   └── services/
 │       ├── __init__.py
 │       ├── document_parser.py   # Modular PDF & DOCX text extraction service
 │       ├── document_validator.py# File extension and content validation
 │       ├── skill_extractor.py   # Rule/taxonomy-based skill extraction engine
-│       └── job_processor.py     # Job description requirements processing service
+│       ├── job_processor.py     # Job description requirements processing service
+│       └── similarity_service.py# Sentence Transformer semantic similarity service
 └── tests/
     ├── __init__.py
-    ├── conftest.py            # Test client & sample document byte fixtures
-    ├── test_document_parser.py# Unit tests for document parser & validator
-    ├── test_resume_api.py     # Integration tests for document upload API
-    ├── test_skill_extractor.py# Unit tests for skill extraction engine
-    ├── test_skill_api.py      # Integration tests for skill extraction API
-    ├── test_job_processor.py  # Unit tests for job description processor
-    └── test_job_api.py        # Integration tests for job description API
+    ├── conftest.py               # Test client & sample document byte fixtures
+    ├── test_document_parser.py   # Unit tests for document parser & validator
+    ├── test_resume_api.py        # Integration tests for document upload API
+    ├── test_skill_extractor.py   # Unit tests for skill extraction engine
+    ├── test_skill_api.py         # Integration tests for skill extraction API
+    ├── test_job_processor.py     # Unit tests for job description processor
+    ├── test_job_api.py           # Integration tests for job description API
+    ├── test_similarity_service.py# Unit tests for similarity service
+    └── test_similarity_api.py    # Integration tests for similarity API
 ```
 
 ## Quickstart Guide
@@ -100,52 +111,23 @@ pytest -v
 - **Resume Parse Endpoint**: `POST http://127.0.0.1:8000/api/v1/resume/parse`
 - **Skill Extraction Endpoint**: `POST http://127.0.0.1:8000/api/v1/resume/skills`
 - **Job Description Processing Endpoint**: `POST http://127.0.0.1:8000/api/v1/job-description/process`
+- **Semantic Similarity Endpoint**: `POST http://127.0.0.1:8000/api/v1/similarity`
 - **Interactive OpenAPI Documentation**: `http://127.0.0.1:8000/docs`
 
-#### Sample Job Description Processing Request (`curl`):
+#### Sample Semantic Similarity Request (`curl`):
 ```bash
-curl -X POST "http://127.0.0.1:8000/api/v1/job-description/process" \
+curl -X POST "http://127.0.0.1:8000/api/v1/similarity" \
      -H "Content-Type: application/json" \
      -d '{
-       "job_title": "Python Developer",
-       "text": "2+ years of Python experience required. Django and PostgreSQL are required. AWS is preferred."
+       "text_a": "Built REST APIs using FastAPI and Python.",
+       "text_b": "Developed backend services and REST APIs."
      }'
 ```
 
 #### Sample Response:
 ```json
 {
-  "job_title": "Python Developer",
-  "required_skills": [
-    "Python",
-    "Django",
-    "PostgreSQL"
-  ],
-  "preferred_skills": [
-    "AWS"
-  ],
-  "minimum_experience_years": 2,
-  "requirements": [
-    {
-      "skill": "Python",
-      "requirement_type": "required",
-      "evidence": "2+ years of Python experience required."
-    },
-    {
-      "skill": "Django",
-      "requirement_type": "required",
-      "evidence": "Django and PostgreSQL are required."
-    },
-    {
-      "skill": "PostgreSQL",
-      "requirement_type": "required",
-      "evidence": "Django and PostgreSQL are required."
-    },
-    {
-      "skill": "AWS",
-      "requirement_type": "preferred",
-      "evidence": "AWS is preferred."
-    }
-  ]
+  "similarity_score": 0.8542,
+  "model_name": "all-MiniLM-L6-v2"
 }
 ```
