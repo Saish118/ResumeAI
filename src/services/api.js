@@ -101,3 +101,58 @@ export async function extractSkills(text) {
     throw error;
   }
 }
+
+/**
+ * Processes raw job description text into structured job requirements.
+ * Endpoint: POST /api/v1/job-description/process
+ *
+ * @param {string} text - Raw job description text
+ * @param {string|null} [jobTitle] - Optional job title
+ * @returns {Promise<{job_title: string|null, required_skills: string[], preferred_skills: string[], minimum_experience_years: number|null, requirements: Array}>}
+ */
+export async function processJobDescription(text, jobTitle = null) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/job-description/process`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ text, job_title: jobTitle }),
+    });
+    return await handleResponse(response);
+  } catch (error) {
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Unable to connect to job description processing service.');
+    }
+    throw error;
+  }
+}
+
+/**
+ * Matches candidate resume data against target job description requirements.
+ * Endpoint: POST /api/v1/match
+ *
+ * @param {Object} resumeData - Resume input data matching ResumeDataInput schema
+ * @param {Object} jobData - Job input data matching JobDataInput schema
+ * @returns {Promise<{overall_score: number, matched_required_skills: string[], missing_required_skills: string[], matched_preferred_skills: string[], missing_preferred_skills: string[], experience_assessment: Object, semantic_evidence_matches: Array, summary: string}>}
+ */
+export async function matchResumeToJob(resumeData, jobData) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/match`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        resume: resumeData,
+        job: jobData,
+      }),
+    });
+    return await handleResponse(response);
+  } catch (error) {
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Unable to connect to matching engine service.');
+    }
+    throw error;
+  }
+}

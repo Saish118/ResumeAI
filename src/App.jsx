@@ -3,8 +3,9 @@ import Header from './components/Header';
 import HeroSection from './components/HeroSection';
 import ResumeUploader from './components/ResumeUploader';
 import AnalysisButton from './components/AnalysisButton';
+import JobDescriptionInput from './components/JobDescriptionInput';
 import ResultsSection from './components/ResultsSection';
-import { parseResume, predictRole, extractSkills } from './services/api';
+import { parseResume, predictRole, extractSkills, processJobDescription, matchResumeToJob } from './services/api';
 
 export default function App() {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -13,11 +14,19 @@ export default function App() {
   const [hasAnalyzed, setHasAnalyzed] = useState(false);
   const [analysisData, setAnalysisData] = useState(null);
 
+  // Target Job Description & Matching state
+  const [jobText, setJobText] = useState('');
+  const [isMatching, setIsMatching] = useState(false);
+  const [matchData, setMatchData] = useState(null);
+  const [matchError, setMatchError] = useState('');
+
   const handleFileSelect = (file) => {
     setSelectedFile(file);
     setErrorMessage('');
     setHasAnalyzed(false);
     setAnalysisData(null);
+    setMatchData(null);
+    setMatchError('');
   };
 
   const handleFileRemove = () => {
@@ -25,6 +34,8 @@ export default function App() {
     setErrorMessage('');
     setHasAnalyzed(false);
     setAnalysisData(null);
+    setMatchData(null);
+    setMatchError('');
   };
 
   const handleAnalyze = async () => {
@@ -33,6 +44,8 @@ export default function App() {
     setIsAnalyzing(true);
     setErrorMessage('');
     setHasAnalyzed(false);
+    setMatchData(null);
+    setMatchError('');
 
     try {
       // Step 1: Parse uploaded document via FastAPI backend
@@ -62,6 +75,41 @@ export default function App() {
     }
   };
 
+  const handleMatchJob = async () => {
+    if (!hasAnalyzed || !analysisData || !jobText.trim() || isMatching) return;
+
+    setIsMatching(true);
+    setMatchError('');
+
+    try {
+      // Step 1: Process raw job description text via FastAPI backend
+      const processedJob = await processJobDescription(jobText.trim());
+
+      // Step 2: Build ResumeDataInput and JobDataInput matching backend schema
+      const resumeInput = {
+        skills: analysisData.skillData.skills || [],
+        extracted_skills: analysisData.skillData.extracted_skills || analysisData.skillData.details || [],
+        candidate_experience_years: null,
+      };
+
+      const jobInput = {
+        job_title: processedJob.job_title || null,
+        required_skills: processedJob.required_skills || [],
+        preferred_skills: processedJob.preferred_skills || [],
+        minimum_experience_years: processedJob.minimum_experience_years || null,
+        requirements: processedJob.requirements || [],
+      };
+
+      // Step 3: Compute match analysis via FastAPI matching engine
+      const matchResult = await matchResumeToJob(resumeInput, jobInput);
+      setMatchData(matchResult);
+    } catch (err) {
+      setMatchError(err.message || 'An unexpected error occurred during job match analysis.');
+    } finally {
+      setIsMatching(false);
+    }
+  };
+
   return (
     <div className="app-shell">
       <Header />
@@ -85,10 +133,22 @@ export default function App() {
           />
         </div>
 
+        <JobDescriptionInput
+          jobText={jobText}
+          setJobText={setJobText}
+          onMatchJob={handleMatchJob}
+          hasAnalyzed={hasAnalyzed}
+          isMatching={isMatching}
+          errorMessage={matchError}
+          setErrorMessage={setMatchError}
+        />
+
         <ResultsSection
           hasAnalyzed={hasAnalyzed}
           isAnalyzing={isAnalyzing}
           analysisData={analysisData}
+          matchData={matchData}
+          isMatching={isMatching}
         />
       </main>
     </div>
