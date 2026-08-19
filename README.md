@@ -17,6 +17,13 @@ ResumeAI is an ML/NLP-powered Resume-to-Job Intelligence Platform designed to ex
 - Deduplicates canonical skill outputs while preserving text appearance ordering.
 - Returns canonical skill lists and extensible structured details with evidence snippets for explainability.
 
+### 3. Job Description Processing v1
+- Ingests raw job description text and an optional job title, converting it into structured job requirements.
+- Reuses the shared skill taxonomy and extraction engine without duplicating skill rules.
+- Classifies extracted skills into **Required** (e.g. `required`, `must have`, `essential`) vs. **Preferred** (e.g. `preferred`, `nice to have`, `bonus`, `plus`).
+- Extracts numeric minimum years of experience using pattern matching (e.g. `2+ years`, `3-5 years`, `minimum 4 years`).
+- Generates sentence-level evidence snippets for each requirement.
+
 ## Project Structure
 
 ```
@@ -33,7 +40,8 @@ ResumeAI/
 │   │       ├── __init__.py
 │   │       ├── health.py # Health check endpoints
 │   │       ├── resume.py # Resume upload and parsing endpoint
-│   │       └── skill.py  # Skill extraction endpoint
+│   │       ├── skill.py  # Skill extraction endpoint
+│   │       └── job.py    # Job description processing endpoint
 │   ├── core/
 │   │   ├── __init__.py
 │   │   ├── config.py   # Application settings & environment configuration
@@ -41,19 +49,23 @@ ResumeAI/
 │   ├── schemas/
 │   │   ├── __init__.py
 │   │   ├── resume.py   # Pydantic schemas for document parsing
-│   │   └── skill.py    # Pydantic schemas for skill extraction
+│   │   ├── skill.py    # Pydantic schemas for skill extraction
+│   │   └── job.py      # Pydantic schemas for job description processing
 │   └── services/
 │       ├── __init__.py
 │       ├── document_parser.py   # Modular PDF & DOCX text extraction service
 │       ├── document_validator.py# File extension and content validation
-│       └── skill_extractor.py   # Rule/taxonomy-based skill extraction engine
+│       ├── skill_extractor.py   # Rule/taxonomy-based skill extraction engine
+│       └── job_processor.py     # Job description requirements processing service
 └── tests/
     ├── __init__.py
     ├── conftest.py            # Test client & sample document byte fixtures
     ├── test_document_parser.py# Unit tests for document parser & validator
     ├── test_resume_api.py     # Integration tests for document upload API
     ├── test_skill_extractor.py# Unit tests for skill extraction engine
-    └── test_skill_api.py      # Integration tests for skill extraction API
+    ├── test_skill_api.py      # Integration tests for skill extraction API
+    ├── test_job_processor.py  # Unit tests for job description processor
+    └── test_job_api.py        # Integration tests for job description API
 ```
 
 ## Quickstart Guide
@@ -87,43 +99,52 @@ pytest -v
 - **Health Check**: `GET http://127.0.0.1:8000/health` or `GET http://127.0.0.1:8000/api/v1/health`
 - **Resume Parse Endpoint**: `POST http://127.0.0.1:8000/api/v1/resume/parse`
 - **Skill Extraction Endpoint**: `POST http://127.0.0.1:8000/api/v1/resume/skills`
+- **Job Description Processing Endpoint**: `POST http://127.0.0.1:8000/api/v1/job-description/process`
 - **Interactive OpenAPI Documentation**: `http://127.0.0.1:8000/docs`
 
-#### Sample Skill Extraction Request (`curl`):
+#### Sample Job Description Processing Request (`curl`):
 ```bash
-curl -X POST "http://127.0.0.1:8000/api/v1/resume/skills" \
+curl -X POST "http://127.0.0.1:8000/api/v1/job-description/process" \
      -H "Content-Type: application/json" \
      -d '{
-       "text": "Built web applications using Python, React.js, and PostgreSQL."
+       "job_title": "Python Developer",
+       "text": "2+ years of Python experience required. Django and PostgreSQL are required. AWS is preferred."
      }'
 ```
 
 #### Sample Response:
 ```json
 {
-  "skills": [
+  "job_title": "Python Developer",
+  "required_skills": [
     "Python",
-    "React",
+    "Django",
     "PostgreSQL"
   ],
-  "extracted_skills": [
+  "preferred_skills": [
+    "AWS"
+  ],
+  "minimum_experience_years": 2,
+  "requirements": [
     {
       "skill": "Python",
-      "matched_alias": "Python",
-      "category": "Programming Languages",
-      "evidence": "applications using Python, React.js, and"
+      "requirement_type": "required",
+      "evidence": "2+ years of Python experience required."
     },
     {
-      "skill": "React",
-      "matched_alias": "React.js",
-      "category": "Web Development",
-      "evidence": "Python, React.js, and PostgreSQL."
+      "skill": "Django",
+      "requirement_type": "required",
+      "evidence": "Django and PostgreSQL are required."
     },
     {
       "skill": "PostgreSQL",
-      "matched_alias": "PostgreSQL",
-      "category": "Databases",
-      "evidence": "React.js, and PostgreSQL."
+      "requirement_type": "required",
+      "evidence": "Django and PostgreSQL are required."
+    },
+    {
+      "skill": "AWS",
+      "requirement_type": "preferred",
+      "evidence": "AWS is preferred."
     }
   ]
 }
