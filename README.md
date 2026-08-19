@@ -49,105 +49,107 @@ ResumeAI is an ML/NLP-powered Resume-to-Job Intelligence Platform designed to ex
   - **Test Accuracy**: **64.79%** (`0.6479`)
   - **Macro F1 Score**: **0.60**
   - **Weighted F1 Score**: **0.63**
-  > **Note on Baseline Results**: These metrics represent baseline evaluation results on the dataset (`opensporks/resumes`, 2,481 usable resumes) and serve as a baseline benchmark for future iterative improvements.
+
+### 7. React + Vite Web Dashboard (Frontend Shell & Upload UI)
+- Clean, light, professional user interface built with **React 18** and **Vite**.
+- Simple hero messaging: *"Understand Your Resume. Match Better Jobs."*
+- Interactive drag-and-drop resume upload zone supporting **PDF** and **DOCX** documents up to 10MB.
+- File status display card with file size formatting and clear remove/change actions.
+- Client-side validation for unsupported file types and size limits with clean user alerts.
+- Structured analysis result cards prepared for future backend data (*Predicted Role*, *Job Match Score*, *Skills Found*, *Missing Skills*, *Key Insights*).
 
 ## Project Structure
 
 ```
 ResumeAI/
-├── .gitignore          # Git ignore rules for Python, virtualenv, macOS, IDEs, and model artifacts
+├── .gitignore          # Git ignore rules for Python, Node, macOS, IDEs, and model artifacts
 ├── README.md           # Project documentation and quickstart guide
-├── requirements.txt    # Application dependencies
-├── ml_training.py      # Offline model training & evaluation script
+├── requirements.txt    # Python backend dependencies
+├── package.json        # Node frontend dependencies & build scripts
+├── vite.config.js      # Vite dev server and build configuration
+├── index.html          # HTML entry point with Inter typography
+├── src/                # Frontend React source code
+│   ├── main.jsx        # React entry point
+│   ├── App.jsx         # Main application container
+│   ├── index.css       # Clean Vanilla CSS design system
+│   └── components/
+│       ├── Header.jsx          # Header with logo & minimal navigation
+│       ├── HeroSection.jsx     # Clean hero copy section
+│       ├── ResumeUploader.jsx  # Drag-and-drop & file upload card
+│       ├── AnalysisButton.jsx  # Primary action button with spinner
+│       ├── ResultCard.jsx      # Reusable result card container
+│       └── ResultsSection.jsx  # 5 structured result placeholder cards
+├── app/                # Python FastAPI Backend
+│   ├── main.py         # FastAPI application entry point
+│   ├── api/v1/         # Endpoint routers (health, resume, skill, job, similarity, match, role)
+│   ├── core/           # Config & taxonomy
+│   ├── schemas/        # Pydantic request/response schemas
+│   └── services/       # Parsing, extraction, matching & ML services
 ├── models/
 │   └── role_classifier.joblib  # Serialized scikit-learn pipeline artifact (git-ignored)
-├── app/
-│   ├── __init__.py     # ResumeAI package marker
-│   ├── main.py         # FastAPI application entry point
-│   ├── api/
-│   │   ├── __init__.py
-│   │   └── v1/
-│   │       ├── __init__.py
-│   │       ├── health.py     # Health check endpoints
-│   │       ├── resume.py     # Resume upload and parsing endpoint
-│   │       ├── skill.py      # Skill extraction endpoint
-│   │       ├── job.py        # Job description processing endpoint
-│   │       ├── similarity.py # Semantic similarity endpoint
-│   │       ├── match.py      # Resume to job matching endpoint
-│   │       └── role.py       # ML Role classification endpoint
-│   ├── core/
-│   │   ├── __init__.py
-│   │   ├── config.py   # Application settings & environment configuration
-│   │   └── taxonomy.py # Controlled skill taxonomy & alias dictionary
-│   ├── schemas/
-│   │   ├── __init__.py
-│   │   ├── resume.py     # Pydantic schemas for document parsing
-│   │   ├── skill.py      # Pydantic schemas for skill extraction
-│   │   ├── job.py        # Pydantic schemas for job description processing
-│   │   ├── similarity.py # Pydantic schemas for semantic similarity
-│   │   ├── match.py      # Pydantic schemas for matching engine
-│   │   └── role.py       # Pydantic schemas for role classification
-│   └── services/
-│       ├── __init__.py
-│       ├── document_parser.py   # Modular PDF & DOCX text extraction service
-│       ├── document_validator.py# File extension and content validation
-│       ├── skill_extractor.py   # Rule/taxonomy-based skill extraction engine
-│       ├── job_processor.py     # Job description requirements processing service
-│       ├── similarity_service.py# Sentence Transformer semantic similarity service
-│       ├── matching_engine.py   # Explainable resume to job matching engine
-│       └── role_classifier.py   # Serialized ML pipeline role classification service
-└── tests/
-    ├── __init__.py
-    ├── conftest.py               # Test client & sample document byte fixtures
-    ├── test_document_parser.py   # Unit tests for document parser & validator
-    ├── test_resume_api.py        # Integration tests for document upload API
-    ├── test_skill_extractor.py   # Unit tests for skill extraction engine
-    ├── test_skill_api.py         # Integration tests for skill extraction API
-    ├── test_job_processor.py     # Unit tests for job description processor
-    ├── test_job_api.py           # Integration tests for job description API
-    ├── test_similarity_service.py# Unit tests for similarity service
-    ├── test_similarity_api.py    # Integration tests for similarity API
-    ├── test_matching_engine.py   # Unit tests for matching engine service
-    ├── test_match_api.py         # Integration tests for matching API
-    ├── test_role_classifier.py   # Unit tests for role classifier service
-    └── test_role_api.py          # Integration tests for role prediction API
+└── tests/              # Pytest backend test suite (71 passing tests)
 ```
 
 ## Quickstart Guide
 
-### 1. Prerequisites
+### 1. Frontend Web App (React + Vite)
+
+#### Prerequisites
+- Node.js 18+ and `npm` installed on your system.
+
+#### Install Frontend Dependencies
+```bash
+npm install
+```
+
+#### Run Frontend Development Server
+```bash
+npm run dev
+```
+The frontend dev server will start at `http://localhost:3000`.
+
+#### Build Frontend for Production
+```bash
+npm run build
+```
+Generates production-optimized bundle files in `dist/`.
+
+---
+
+### 2. Backend Server (FastAPI)
+
+#### Prerequisites
 - Python 3.9+ installed on your system.
 
-### 2. Create & Activate Virtual Environment
+#### Create & Activate Virtual Environment
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-### 3. Install Dependencies
+#### Install Backend Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Train Model Artifact (Offline Script)
+#### Train Model Artifact (Offline Script)
 ```bash
 python ml_training.py
 ```
-This trains the model pipeline and serializes it to `models/role_classifier.joblib`.
 
-### 5. Run the Backend Server
+#### Run the Backend Server
 ```bash
 uvicorn app.main:app --reload --port 8000
 ```
-The server will start at `http://127.0.0.1:8000`.
+The backend server will start at `http://127.0.0.1:8000`.
 
-### 6. Run Automated Tests
+#### Run Automated Tests
 ```bash
 pytest -v
 ```
 
-### 7. Test Endpoints
-- **Health Check**: `GET http://127.0.0.1:8000/health` or `GET http://127.0.0.1:8000/api/v1/health`
+### 3. API Endpoints Overview
+- **Health Check**: `GET http://127.0.0.1:8000/health`
 - **Resume Parse Endpoint**: `POST http://127.0.0.1:8000/api/v1/resume/parse`
 - **Skill Extraction Endpoint**: `POST http://127.0.0.1:8000/api/v1/resume/skills`
 - **Job Description Processing Endpoint**: `POST http://127.0.0.1:8000/api/v1/job-description/process`
@@ -155,20 +157,3 @@ pytest -v
 - **Resume ↔ Job Match Endpoint**: `POST http://127.0.0.1:8000/api/v1/match`
 - **ML Role Classification Endpoint**: `POST http://127.0.0.1:8000/api/v1/role/predict`
 - **Interactive OpenAPI Documentation**: `http://127.0.0.1:8000/docs`
-
-#### Sample ML Role Classification Request (`curl`):
-```bash
-curl -X POST "http://127.0.0.1:8000/api/v1/role/predict" \
-     -H "Content-Type: application/json" \
-     -d '{
-       "text": "Experienced Senior Software Engineer proficient in Python, C++, distributed microservices architecture, and Linux kernel development."
-     }'
-```
-
-#### Sample Response:
-```json
-{
-  "predicted_role": "ENGINEERING",
-  "confidence": 0.0791
-}
-```
