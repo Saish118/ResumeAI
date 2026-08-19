@@ -30,6 +30,18 @@ ResumeAI is an ML/NLP-powered Resume-to-Job Intelligence Platform designed to ex
 - Leverages a lazy singleton pattern to load model weights once and reuse them across requests.
 - Returns normalized similarity scores (`0.0` to `1.0`) with graceful handling for empty/whitespace inputs.
 
+### 5. Resume ↔ Job Matching Engine v1
+- Compares structured resume data against job description requirements to compute an explainable overall match analysis bounded between **0 and 100**.
+- **Exact Skill Matching**: Evaluates canonical skill overlap, producing lists of matched/missing required skills and matched/missing preferred skills.
+- **Experience Fit Assessment**: Compares candidate experience against minimum required years (`matched`, `below_requirement`, or `unknown` when unavailable).
+- **Requirement-Level Semantic Evidence Matching**: Computes sentence-level semantic similarity between job requirements and candidate resume evidence snippets.
+- **Configurable Scoring Weights**:
+  - Required Skills: **50%**
+  - Preferred Skills: **20%**
+  - Semantic Evidence: **20%**
+  - Experience Fit: **10%**
+  > **Note on Initial Baseline Weights**: The default weights are initial configurable baseline heuristic assumptions and will require empirical evaluation and tuning against real-world candidate benchmark data in future iterations.
+
 ## Project Structure
 
 ```
@@ -48,7 +60,8 @@ ResumeAI/
 │   │       ├── resume.py     # Resume upload and parsing endpoint
 │   │       ├── skill.py      # Skill extraction endpoint
 │   │       ├── job.py        # Job description processing endpoint
-│   │       └── similarity.py # Semantic similarity endpoint
+│   │       ├── similarity.py # Semantic similarity endpoint
+│   │       └── match.py      # Resume to job matching endpoint
 │   ├── core/
 │   │   ├── __init__.py
 │   │   ├── config.py   # Application settings & environment configuration
@@ -58,14 +71,16 @@ ResumeAI/
 │   │   ├── resume.py     # Pydantic schemas for document parsing
 │   │   ├── skill.py      # Pydantic schemas for skill extraction
 │   │   ├── job.py        # Pydantic schemas for job description processing
-│   │   └── similarity.py # Pydantic schemas for semantic similarity
+│   │   ├── similarity.py # Pydantic schemas for semantic similarity
+│   │   └── match.py      # Pydantic schemas for matching engine
 │   └── services/
 │       ├── __init__.py
 │       ├── document_parser.py   # Modular PDF & DOCX text extraction service
 │       ├── document_validator.py# File extension and content validation
 │       ├── skill_extractor.py   # Rule/taxonomy-based skill extraction engine
 │       ├── job_processor.py     # Job description requirements processing service
-│       └── similarity_service.py# Sentence Transformer semantic similarity service
+│       ├── similarity_service.py# Sentence Transformer semantic similarity service
+│       └── matching_engine.py   # Explainable resume to job matching engine
 └── tests/
     ├── __init__.py
     ├── conftest.py               # Test client & sample document byte fixtures
@@ -76,7 +91,9 @@ ResumeAI/
     ├── test_job_processor.py     # Unit tests for job description processor
     ├── test_job_api.py           # Integration tests for job description API
     ├── test_similarity_service.py# Unit tests for similarity service
-    └── test_similarity_api.py    # Integration tests for similarity API
+    ├── test_similarity_api.py    # Integration tests for similarity API
+    ├── test_matching_engine.py   # Unit tests for matching engine service
+    └── test_match_api.py         # Integration tests for matching API
 ```
 
 ## Quickstart Guide
@@ -112,22 +129,69 @@ pytest -v
 - **Skill Extraction Endpoint**: `POST http://127.0.0.1:8000/api/v1/resume/skills`
 - **Job Description Processing Endpoint**: `POST http://127.0.0.1:8000/api/v1/job-description/process`
 - **Semantic Similarity Endpoint**: `POST http://127.0.0.1:8000/api/v1/similarity`
+- **Resume ↔ Job Match Endpoint**: `POST http://127.0.0.1:8000/api/v1/match`
 - **Interactive OpenAPI Documentation**: `http://127.0.0.1:8000/docs`
 
-#### Sample Semantic Similarity Request (`curl`):
+#### Sample Resume ↔ Job Match Request (`curl`):
 ```bash
-curl -X POST "http://127.0.0.1:8000/api/v1/similarity" \
+curl -X POST "http://127.0.0.1:8000/api/v1/match" \
      -H "Content-Type: application/json" \
      -d '{
-       "text_a": "Built REST APIs using FastAPI and Python.",
-       "text_b": "Developed backend services and REST APIs."
+       "resume": {
+         "skills": ["Python", "FastAPI", "PostgreSQL"],
+         "extracted_skills": [
+           {
+             "skill": "Python",
+             "matched_alias": "Python",
+             "category": "Programming Languages",
+             "evidence": "5 years of Python development experience."
+           }
+         ],
+         "candidate_experience_years": 5
+       },
+       "job": {
+         "job_title": "Senior Python Backend Engineer",
+         "required_skills": ["Python", "PostgreSQL"],
+         "preferred_skills": ["Docker"],
+         "minimum_experience_years": 3,
+         "requirements": [
+           {
+             "skill": "Python",
+             "requirement_type": "required",
+             "evidence": "Minimum 3 years of Python backend engineering."
+           }
+         ]
+       }
      }'
 ```
 
 #### Sample Response:
 ```json
 {
-  "similarity_score": 0.8542,
-  "model_name": "all-MiniLM-L6-v2"
+  "overall_score": 92.5,
+  "matched_required_skills": [
+    "Python",
+    "PostgreSQL"
+  ],
+  "missing_required_skills": [],
+  "matched_preferred_skills": [],
+  "missing_preferred_skills": [
+    "Docker"
+  ],
+  "experience_assessment": {
+    "required_years": 3,
+    "candidate_years": 5,
+    "meets_requirement": true,
+    "status": "matched"
+  },
+  "semantic_evidence_matches": [
+    {
+      "requirement_skill": "Python",
+      "requirement_evidence": "Minimum 3 years of Python backend engineering.",
+      "best_matching_resume_evidence": "5 years of Python development experience.",
+      "similarity_score": 0.8124
+    }
+  ],
+  "summary": "Overall Match Score: 92.5/100. Matched all required skills (Python, PostgreSQL). Matched 0/1 preferred skills. Candidate meets minimum experience requirement (5y vs 3y required)."
 }
 ```
