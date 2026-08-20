@@ -36,7 +36,9 @@ export default function ResultsSection({ hasAnalyzed, isAnalyzing, analysisData,
                 {roleData.predicted_role}
               </div>
               <div style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
-                Model confidence score: <strong>{(roleData.confidence * 100).toFixed(1)}%</strong>
+                {roleData.confidence !== null && roleData.confidence !== undefined
+                  ? <>Raw model score: <strong>{Number(roleData.confidence).toFixed(2)}</strong></>
+                  : 'Model score unavailable'}
               </div>
             </div>
           ) : (

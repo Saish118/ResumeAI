@@ -44,13 +44,13 @@ class RoleClassifier:
 
     def predict_role(self, text: Optional[str]) -> RolePredictResponse:
         """
-        Predicts the job role category and probability confidence for input text.
+        Predicts the job role category and uncalibrated raw model score for input text.
 
         Args:
             text: Raw input text from resume.
 
         Returns:
-            RolePredictResponse containing predicted_role and confidence score.
+            RolePredictResponse containing predicted_role and raw model score (confidence field).
         """
         if not text or not text.strip():
             return RolePredictResponse(
@@ -65,7 +65,7 @@ class RoleClassifier:
         predictions = model.predict([clean_text])
         predicted_role = str(predictions[0])
 
-        # Compute confidence score from class probabilities
+        # Compute raw model score from class probabilities (uncalibrated)
         confidence = 0.0
         if hasattr(model, "predict_proba"):
             probabilities = model.predict_proba([clean_text])[0]

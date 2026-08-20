@@ -22,11 +22,31 @@ MONTH_MAP = {
 
 PRESENT_TERMS = {"present", "current", "now", "ongoing", "till date", "today"}
 
+WORK_EXP_HEADER_RE = re.compile(
+    r'^\s*(?:work\s+experience|professional\s+experience|employment\s+history|work\s+history|career\s+history|relevant\s+experience|work\s+&\s+internship\s+experience|internship\s+experience|internships|experience|employment)\b',
+    re.IGNORECASE
+)
+
+NON_WORK_HEADER_RE = re.compile(
+    r'^\s*(?:education|academic\s+background|academic\s+profile|academic\s+qualifications|academics|qualifications|educational\s+background|projects|academic\s+projects|personal\s+projects|key\s+projects|certifications|certificates|licenses(?:\s+&\s+certifications)?|trainings?|training\s+&\s+workshops|workshops|skills|technical\s+skills|core\s+competencies|publications|awards|honors|achievements|extracurricular(?:\s+activities)?|activities|volunteering|volunteer\s+experience|languages|references|summary|profile|objective)\b',
+    re.IGNORECASE
+)
+
+EDUCATION_KEYWORD_RE = re.compile(
+    r'\b(?:university|college|polytechnic|institute|school|academy|degree|bachelor|b\.tech|b\.e\.|b\.s\.|b\.a\.|b\.c\.a\.|master|m\.tech|m\.e\.|m\.s\.|m\.c\.a\.|ph\.d|phd|diploma|hsc|ssc|high\s+school|matriculation|gpa|cgpa)\b',
+    re.IGNORECASE
+)
+
+CERTIFICATION_KEYWORD_RE = re.compile(
+    r'\b(?:certification|certificate|certified|license|licence)\b',
+    re.IGNORECASE
+)
+
 
 class ExperienceExtractor:
     """
     Extracts total candidate work experience in years, evidence snippets, and confidence levels
-    from parsed resume text.
+    from parsed resume text, enforcing section isolation to exclude education, certifications, and projects.
     """
 
     def __init__(self, current_year: Optional[int] = None, current_month: Optional[int] = None):
@@ -34,42 +54,57 @@ class ExperienceExtractor:
         self.current_year = current_year or now.year
         self.current_month = current_month or now.month
 
-    def _extract_experience_section(self, text: str) -> str:
+    def _parse_sections(self, text: str) -> List[Dict[str, Any]]:
         """
-        Extracts the Work Experience section from resume text if explicit section headers exist.
-        If no section headers are found, returns the entire text.
+        Parses resume text into structured sections categorized as WORK_EXPERIENCE, NON_WORK, or UNKNOWN.
         """
         lines = text.splitlines()
-        exp_start_idx = None
-        exp_end_idx = None
+        sections = []
+        current_header = "HEADER"
+        current_type = "UNKNOWN"
+        current_lines = []
 
-        section_header_pattern = re.compile(
-            r'^\s*(?:work\s+experience|professional\s+experience|employment\s+history|work\s+history|experience|employment)\b',
-            re.IGNORECASE
-        )
-        stop_header_pattern = re.compile(
-            r'^\s*(?:education|projects|academic|certifications|skills|technical\s+skills|publications|awards|languages|references|summary|objective)\b',
-            re.IGNORECASE
-        )
-
-        for i, line in enumerate(lines):
+        for line in lines:
             stripped = line.strip()
             if not stripped:
+                current_lines.append(line)
                 continue
 
-            if exp_start_idx is None:
-                if section_header_pattern.match(stripped):
-                    exp_start_idx = i
-            else:
-                if stop_header_pattern.match(stripped) and len(stripped.split()) <= 4:
-                    exp_end_idx = i
-                    break
+            words = stripped.split()
+            if len(words) <= 5:
+                if WORK_EXP_HEADER_RE.match(stripped):
+                    if current_lines:
+                        sections.append({
+                            "header": current_header,
+                            "type": current_type,
+                            "text": "\n".join(current_lines)
+                        })
+                    current_header = stripped
+                    current_type = "WORK_EXPERIENCE"
+                    current_lines = []
+                    continue
+                elif NON_WORK_HEADER_RE.match(stripped):
+                    if current_lines:
+                        sections.append({
+                            "header": current_header,
+                            "type": current_type,
+                            "text": "\n".join(current_lines)
+                        })
+                    current_header = stripped
+                    current_type = "NON_WORK"
+                    current_lines = []
+                    continue
 
-        if exp_start_idx is not None:
-            end_idx = exp_end_idx if exp_end_idx is not None else len(lines)
-            return "\n".join(lines[exp_start_idx:end_idx])
+            current_lines.append(line)
 
-        return text
+        if current_lines:
+            sections.append({
+                "header": current_header,
+                "type": current_type,
+                "text": "\n".join(current_lines)
+            })
+
+        return sections
 
     def _parse_month_year(self, month_str: str, year_str: str) -> Tuple[int, int]:
         """Converts month string and year string into (year, month) tuple."""
@@ -87,7 +122,8 @@ class ExperienceExtractor:
 
     def _extract_explicit_statements(self, text: str) -> Tuple[Optional[float], List[str]]:
         """
-        Extracts explicit summary statements of experience (e.g. '3+ years of experience', '5 years of work experience').
+        Extracts explicit summary statements of work experience (e.g. '3+ years of experience').
+        Excludes snippets associated with education or certifications.
         """
         patterns = [
             r'(\b\d+(?:\.\d+)?)\s*\+\s*years?(?:\s+of)?\s+(?:professional|work|industry|overall|total|software|backend|frontend|data)?\s*experience',
@@ -99,8 +135,11 @@ class ExperienceExtractor:
             matches = re.finditer(pattern, text, re.IGNORECASE)
             for m in matches:
                 try:
+                    snippet = text[max(0, m.start() - 50):min(len(text), m.end() + 50)].strip().replace('\n', ' ')
+                    if EDUCATION_KEYWORD_RE.search(snippet) or CERTIFICATION_KEYWORD_RE.search(snippet):
+                        continue
+
                     years = float(m.group(1))
-                    # Ignore unreasonably large numbers (e.g., 50+ years) or 0
                     if 0.2 <= years <= 45.0:
                         return round(years, 1), [f"Explicit statement: \"{m.group(0)}\""]
                 except ValueError:
@@ -110,19 +149,19 @@ class ExperienceExtractor:
 
     def _extract_date_ranges(self, text: str) -> List[Dict[str, Any]]:
         """
-        Extracts date ranges from text (e.g., 'Jan 2022 - Present', '01/2020 - 12/2022', '2019 - 2021').
+        Extracts date ranges from text, filtering out snippets tied to education or certifications.
         """
         month_pattern = r'(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|\d{1,2})'
         year_pattern = r'(?:19|20)\d{2}'
         present_pattern = r'(?:Present|Current|Now|Ongoing|Till\s+Date|Today)'
 
-        # Pattern 1: Month Year - Month Year / Present (e.g. "Jan 2022 - Present", "01/2020 - 12/2022", "Feb 2021 to May 2023")
+        # Pattern 1: Month Year - Month Year / Present
         range_pattern_1 = re.compile(
             rf'({month_pattern})\s*[\./-]?\s*({year_pattern})\s*(?:-|–|—|to)\s*(?:({month_pattern})\s*[\./-]?\s*({year_pattern})|({present_pattern}))',
             re.IGNORECASE
         )
 
-        # Pattern 2: Year - Year / Present (e.g. "2019 - 2021", "2022 - Present")
+        # Pattern 2: Year - Year / Present
         range_pattern_2 = re.compile(
             rf'\b({year_pattern})\s*(?:-|–|—|to)\s*(?:({year_pattern})|({present_pattern}))\b',
             re.IGNORECASE
@@ -132,6 +171,12 @@ class ExperienceExtractor:
 
         # Process Pattern 1
         for m in range_pattern_1.finditer(text):
+            snippet = text[max(0, m.start() - 60):min(len(text), m.end() + 60)].strip().replace('\n', ' ')
+
+            # Skip ranges explicitly associated with education or certification terms
+            if EDUCATION_KEYWORD_RE.search(snippet) or CERTIFICATION_KEYWORD_RE.search(snippet):
+                continue
+
             start_m, start_y = m.group(1), m.group(2)
             end_m, end_y, end_pres = m.group(3), m.group(4), m.group(5)
 
@@ -146,13 +191,11 @@ class ExperienceExtractor:
             else:
                 continue
 
-            # Validate range integrity
             if e_year < s_year or (e_year == s_year and e_month < s_month):
                 continue
             if s_year > self.current_year:
                 continue
 
-            snippet = text[max(0, m.start() - 40):min(len(text), m.end() + 40)].strip().replace('\n', ' ')
             is_internship = bool(re.search(r'\bintern(?:ship)?\b', snippet, re.IGNORECASE))
 
             ranges.append({
@@ -166,8 +209,12 @@ class ExperienceExtractor:
                 "snippet": snippet
             })
 
-        # Process Pattern 2 (only if no Pattern 1 match covered this position)
+        # Process Pattern 2
         for m in range_pattern_2.finditer(text):
+            snippet = text[max(0, m.start() - 60):min(len(text), m.end() + 60)].strip().replace('\n', ' ')
+
+            if EDUCATION_KEYWORD_RE.search(snippet) or CERTIFICATION_KEYWORD_RE.search(snippet):
+                continue
 
             s_year = int(m.group(1))
             end_y, end_pres = m.group(2), m.group(3)
@@ -182,14 +229,9 @@ class ExperienceExtractor:
                 continue
 
             s_month = 1
-            if e_year < s_year:
-                continue
-            if s_year > self.current_year:
+            if e_year < s_year or s_year > self.current_year:
                 continue
 
-            snippet = text[max(0, m.start() - 40):min(len(text), m.end() + 40)].strip().replace('\n', ' ')
-
-            # Check if overlapping with Pattern 1 range
             if any(r["match_text"] in m.group(0) or m.group(0) in r["match_text"] for r in ranges):
                 continue
 
@@ -227,7 +269,6 @@ class ExperienceExtractor:
             months = max(1, end_idx - start_idx + 1)
             evidence.append(f"{r['match_text']}: {round(months / 12.0, 1)}y ({r['snippet']})")
 
-        # Sort intervals by start month index
         intervals.sort(key=lambda x: x[0])
 
         merged = []
@@ -239,7 +280,6 @@ class ExperienceExtractor:
                 curr_start, curr_end, curr_r = curr
 
                 if curr_start <= prev_end + 1:
-                    # Overlapping or contiguous interval -> merge
                     new_end = max(prev_end, curr_end)
                     merged[-1] = (prev_start, new_end, prev_r)
                 else:
@@ -269,25 +309,28 @@ class ExperienceExtractor:
             }
 
         cleaned_text = text.strip()
+        sections = self._parse_sections(cleaned_text)
 
-        # Step 1: Scope to work experience section if available
-        exp_section_text = self._extract_experience_section(cleaned_text)
+        # Target WORK_EXPERIENCE sections if explicitly present
+        work_sections = [s["text"] for s in sections if s["type"] == "WORK_EXPERIENCE"]
+        if work_sections:
+            target_text = "\n".join(work_sections)
+        else:
+            # If explicit NON_WORK sections (e.g. EDUCATION, PROJECTS) were found, exclude them
+            has_non_work = any(s["type"] == "NON_WORK" for s in sections)
+            if has_non_work:
+                target_text = "\n".join([s["text"] for s in sections if s["type"] != "NON_WORK"])
+            else:
+                target_text = cleaned_text
 
-        # Step 2: Check for explicit experience summary statements (e.g. "3+ years of experience")
+        # Extract explicit summary statements and date ranges
         explicit_years, explicit_evidence = self._extract_explicit_statements(cleaned_text)
+        date_ranges = self._extract_date_ranges(target_text)
 
-        # Step 3: Extract employment date ranges from experience section
-        date_ranges = self._extract_date_ranges(exp_section_text)
-        if not date_ranges and exp_section_text != cleaned_text:
-            # Fall back to full text if section isolation didn't yield dates
-            date_ranges = self._extract_date_ranges(cleaned_text)
-
-        # Step 4: Calculate duration & handle edge cases
         if date_ranges:
             total_months, range_evidence = self._merge_month_intervals(date_ranges)
             calculated_years = round(total_months / 12.0, 1)
 
-            # Check if all ranges are internships
             all_internships = all(r.get("is_internship", False) for r in date_ranges)
 
             if explicit_years is not None:
@@ -312,7 +355,6 @@ class ExperienceExtractor:
                 "confidence": "medium"
             }
 
-        # Step 5: Ambiguous / No Experience Found / Fresher -> Return null
         return {
             "candidate_experience_years": None,
             "evidence": [],

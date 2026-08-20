@@ -109,6 +109,82 @@ def test_no_experience_information(extractor: ExperienceExtractor):
     assert result["evidence"] == []
 
 
+def test_education_dates_must_not_count_as_experience(extractor: ExperienceExtractor):
+    text = """
+    EDUCATION
+    Sanjivani University | B.Tech Computer Engineering
+    2025 – Present
+
+    Sanjivani K.B.P. Polytechnic | Diploma in Computer Technology
+    2020 – 2024
+    """
+    result = extractor.extract_experience(text)
+    assert result["candidate_experience_years"] is None
+    assert result["confidence"] == "low"
+    assert result["evidence"] == []
+
+
+def test_certification_dates_must_not_count(extractor: ExperienceExtractor):
+    text = """
+    CERTIFICATIONS
+    AWS Certified Cloud Practitioner (2022 - 2025)
+    Google Professional Cloud Architect (2023 - Present)
+    """
+    result = extractor.extract_experience(text)
+    assert result["candidate_experience_years"] is None
+    assert result["confidence"] == "low"
+    assert result["evidence"] == []
+
+
+def test_project_dates_must_not_count(extractor: ExperienceExtractor):
+    text = """
+    PROJECTS
+    Smart Resume Analyzer System
+    Jan 2023 - Dec 2024
+    - Built AI matching engine.
+    """
+    result = extractor.extract_experience(text)
+    assert result["candidate_experience_years"] is None
+    assert result["confidence"] == "low"
+    assert result["evidence"] == []
+
+
+def test_user_6_7_year_bug_regression(extractor: ExperienceExtractor):
+    """
+    Regression test for the 6.7-year bug where education date ranges (2020-2024, 2025-Present)
+    were incorrectly added to internship work experience.
+    """
+    text = """
+    SANJEEV JOSHI
+    Email: sanjeev@example.com
+
+    EDUCATION
+    Sanjivani University | B.Tech Computer Engineering
+    2025 – Present
+
+    Sanjivani K.B.P. Polytechnic | Diploma in Computer Technology
+    2020 – 2024
+
+    WORK EXPERIENCE
+    Software Engineer Intern | Tech Solutions
+    Jan 2024 - Jun 2024
+
+    PROJECTS
+    Smart Resume Analyzer
+    2023 - 2024
+
+    CERTIFICATIONS
+    AWS Certified Cloud Practitioner
+    2023
+    """
+    result = extractor.extract_experience(text)
+    # Jan 2024 - Jun 2024 = 6 months = 0.5 years (NOT 6.7 years)
+    assert result["candidate_experience_years"] == 0.5
+    assert result["candidate_experience_years"] != 6.7
+    assert len(result["evidence"]) == 1
+    assert "Jan 2024 - Jun 2024" in result["evidence"][0]
+
+
 def test_invalid_or_empty_text(extractor: ExperienceExtractor):
     assert extractor.extract_experience("")["candidate_experience_years"] is None
     assert extractor.extract_experience("   ")["candidate_experience_years"] is None
@@ -118,3 +194,4 @@ def test_invalid_or_empty_text(extractor: ExperienceExtractor):
 def test_singleton_instance():
     res = experience_extractor.extract_experience("5 years of experience")
     assert res["candidate_experience_years"] == 5.0
+

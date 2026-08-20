@@ -9,11 +9,11 @@ class RolePredictRequest(BaseModel):
 
 
 class RolePredictResponse(BaseModel):
-    """Structured response payload containing predicted role and confidence score."""
+    """Structured response payload containing predicted role and raw model score."""
     predicted_role: str = Field(..., description="Predicted job role category (one of 24 taxonomy categories)")
     confidence: float = Field(
         ...,
-        description="Model prediction confidence/probability score bounded between 0.0 and 1.0",
+        description="Classifier raw probability/uncalibrated model score bounded between 0.0 and 1.0",
         ge=0.0,
         le=1.0
     )
