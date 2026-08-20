@@ -14,6 +14,7 @@ from app.services.document_parser import (
 from app.services.document_validator import DocumentValidationError
 from app.services.experience_extractor import experience_extractor
 from app.services.role_classifier import role_classifier
+from app.services.resume_validator import resume_validator
 from app.db.database import get_db
 from app.db.models import ResumeAnalysis
 
@@ -32,8 +33,8 @@ async def parse_resume(
 ) -> ResumeParseResponse:
     """
     Accepts a resume upload (PDF or DOCX format), validates file format/integrity,
-    extracts the raw text, predicts job role & candidate experience, persists a ResumeAnalysis record,
-    and returns structured metadata.
+    validates resume content structure, extracts raw text, predicts job role & candidate experience,
+    persists a ResumeAnalysis record, and returns structured metadata.
     """
     if not file or not file.filename:
         raise HTTPException(
@@ -44,6 +45,14 @@ async def parse_resume(
     try:
         content = await file.read()
         parsed_result = parse_resume_document(file.filename, content)
+
+        # Validate document content to ensure it is a valid resume
+        validation_res = resume_validator.validate(parsed_result.extracted_text)
+        if not validation_res["is_resume"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This document does not appear to be a resume. Please upload a resume containing information such as experience, education, skills, or projects."
+            )
 
         # Run role classification & experience extraction for persistence record
         role_res = role_classifier.predict_role(parsed_result.extracted_text) if parsed_result.extracted_text else None
@@ -72,6 +81,8 @@ async def parse_resume(
             db.rollback()
 
         return parsed_result
+    except HTTPException:
+        raise
     except DocumentValidationError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

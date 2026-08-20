@@ -95,7 +95,7 @@ def sample_pdf_bytes() -> bytes:
     page = doc.new_page()
     page.insert_text(
         (50, 50),
-        "John Doe\nSoftware Engineer\nExperience in Python, FastAPI, and Machine Learning."
+        "John Doe\njohn@doe.dev | 555-0199\nSUMMARY\nSoftware Engineer\nEXPERIENCE\nExperience in Python, FastAPI, and Machine Learning.\nEDUCATION\nBS Computer Science\nSKILLS\nPython, FastAPI, SQL"
     )
     pdf_bytes = doc.tobytes()
     doc.close()
@@ -107,7 +107,11 @@ def sample_docx_bytes() -> bytes:
     """Generates valid sample DOCX file bytes with text."""
     doc = docx.Document()
     doc.add_heading("Jane Smith", level=0)
-    doc.add_paragraph("Senior Data Scientist with expertise in NLP, Python, and PyTorch.")
+    doc.add_paragraph("jane@smith.dev | 555-0188")
+    doc.add_paragraph("SUMMARY\nSenior Data Scientist")
+    doc.add_paragraph("EXPERIENCE\nExpertise in NLP, Python, and PyTorch.")
+    doc.add_paragraph("EDUCATION\nMS Data Science")
+    doc.add_paragraph("SKILLS\nPython, PyTorch, SQL")
     stream = io.BytesIO()
     doc.save(stream)
     return stream.getvalue()

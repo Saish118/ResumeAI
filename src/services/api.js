@@ -261,3 +261,84 @@ export async function getMatchHistoryDetail(matchId) {
   }
 }
 
+/**
+ * Fetches the latest analysis context from PostgreSQL history for page refresh restoration.
+ *
+ * @returns {Promise<{
+ *   isRestored: boolean,
+ *   resumeAnalysis: Object|null,
+ *   jobAnalysis: Object|null,
+ *   matchData: Object|null
+ * }|null>}
+ */
+export async function getLatestAnalysisContext() {
+  try {
+    // 1. Prefer the most recent complete match evaluation
+    const matches = await getMatchHistory(1);
+    if (matches && matches.length > 0) {
+      const latestMatchSummary = matches[0];
+      const matchDetail = await getMatchHistoryDetail(latestMatchSummary.id);
+      return {
+        isRestored: true,
+        type: 'match',
+        resumeAnalysis: matchDetail.resume_analysis || null,
+        jobAnalysis: matchDetail.job_analysis || null,
+        matchData: matchDetail,
+      };
+    }
+
+    // 2. Otherwise compare latest standalone resume analysis vs latest job description analysis
+    const [resumes, jobs] = await Promise.all([
+      getResumeHistory(1),
+      getJobHistory(1)
+    ]);
+
+    const latestResume = resumes && resumes.length > 0 ? resumes[0] : null;
+    const latestJob = jobs && jobs.length > 0 ? jobs[0] : null;
+
+    if (latestResume && latestJob) {
+      const resumeTime = new Date(latestResume.created_at || 0).getTime();
+      const jobTime = new Date(latestJob.created_at || 0).getTime();
+      if (resumeTime >= jobTime) {
+        return {
+          isRestored: true,
+          type: 'resume',
+          resumeAnalysis: latestResume,
+          jobAnalysis: null,
+          matchData: null,
+        };
+      } else {
+        return {
+          isRestored: true,
+          type: 'job',
+          resumeAnalysis: null,
+          jobAnalysis: latestJob,
+          matchData: null,
+        };
+      }
+    } else if (latestResume) {
+      return {
+        isRestored: true,
+        type: 'resume',
+        resumeAnalysis: latestResume,
+        jobAnalysis: null,
+        matchData: null,
+      };
+    } else if (latestJob) {
+      return {
+        isRestored: true,
+        type: 'job',
+        resumeAnalysis: null,
+        jobAnalysis: latestJob,
+        matchData: null,
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.warn('Failed to fetch latest analysis context for restoration:', error);
+    return null;
+  }
+}
+
+

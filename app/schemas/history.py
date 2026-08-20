@@ -15,6 +15,7 @@ class ResumeAnalysisHistoryItem(BaseModel):
     file_type: str
     character_count: int
     page_count: Optional[int] = None
+    extracted_text: Optional[str] = None
     predicted_role: Optional[str] = None
     role_model_score: Optional[float] = None
     candidate_experience_years: Optional[float] = None
@@ -28,6 +29,7 @@ class JobAnalysisHistoryItem(BaseModel):
 
     id: int
     job_title: Optional[str] = None
+    job_description: Optional[str] = None
     required_skills: List[str] = Field(default_factory=list)
     preferred_skills: List[str] = Field(default_factory=list)
     minimum_experience_years: Optional[int] = None

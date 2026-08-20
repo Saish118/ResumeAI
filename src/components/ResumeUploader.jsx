@@ -1,9 +1,18 @@
 import React, { useRef, useState } from 'react';
-import { UploadCloud, File, X, AlertCircle } from 'lucide-react';
+import { UploadCloud, File, X, AlertCircle, History } from 'lucide-react';
 
 const MAX_FILE_SIZE_MB = 10;
 
-export default function ResumeUploader({ selectedFile, onFileSelect, onFileRemove, errorMessage, setErrorMessage }) {
+export default function ResumeUploader({
+  selectedFile,
+  onFileSelect,
+  onFileRemove,
+  errorMessage,
+  setErrorMessage,
+  isRestored = false,
+  restoredFilename = '',
+  onClearRestored = null
+}) {
   const [isDragActive, setIsDragActive] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -57,6 +66,43 @@ export default function ResumeUploader({ selectedFile, onFileSelect, onFileRemov
 
   return (
     <div className="uploader-card" id="upload">
+      {isRestored && restoredFilename && !selectedFile && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          backgroundColor: '#eff6ff',
+          border: '1px solid #bfdbfe',
+          color: '#1e40af',
+          padding: '10px 14px',
+          borderRadius: 'var(--radius-sm, 6px)',
+          marginBottom: '14px',
+          fontSize: '0.875rem'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <History size={16} />
+            <span>Previous analysis restored: <strong>{restoredFilename}</strong></span>
+          </div>
+          {onClearRestored && (
+            <button
+              type="button"
+              onClick={onClearRestored}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#1d4ed8',
+                cursor: 'pointer',
+                fontSize: '0.8125rem',
+                fontWeight: '600',
+                textDecoration: 'underline'
+              }}
+            >
+              Clear / Reset
+            </button>
+          )}
+        </div>
+      )}
+
       {errorMessage && (
         <div className="error-alert" role="alert">
           <AlertCircle size={18} />

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Header from './components/Header';
 import HeroSection from './components/HeroSection';
 import ResumeUploader from './components/ResumeUploader';
@@ -6,7 +6,15 @@ import AnalysisButton from './components/AnalysisButton';
 import JobDescriptionInput from './components/JobDescriptionInput';
 import ResultsSection from './components/ResultsSection';
 import HistoryPage from './components/HistoryPage';
-import { parseResume, predictRole, extractSkills, extractExperience, processJobDescription, matchResumeToJob } from './services/api';
+import {
+  parseResume,
+  predictRole,
+  extractSkills,
+  extractExperience,
+  processJobDescription,
+  matchResumeToJob,
+  getLatestAnalysisContext
+} from './services/api';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -22,6 +30,94 @@ export default function App() {
   const [matchData, setMatchData] = useState(null);
   const [matchError, setMatchError] = useState('');
 
+  // Persisted Analysis Restoration state
+  const [isRestored, setIsRestored] = useState(false);
+  const [restoredFilename, setRestoredFilename] = useState('');
+
+  // Restore latest analysis from PostgreSQL history on startup
+  useEffect(() => {
+    async function restoreLatestContext() {
+      try {
+        const latest = await getLatestAnalysisContext();
+        if (!latest) return;
+
+        const res = latest.resumeAnalysis;
+        const job = latest.jobAnalysis;
+        const match = latest.matchData;
+
+        if (res) {
+          let skillData = { skills: [], details: [], categories_found: [] };
+          let experienceData = {
+            candidate_experience_years: res.candidate_experience_years ?? null,
+            evidence: [],
+            confidence: 'medium'
+          };
+
+          if (res.extracted_text && res.extracted_text.trim()) {
+            try {
+              const [extractedSkills, extractedExp] = await Promise.all([
+                extractSkills(res.extracted_text),
+                extractExperience(res.extracted_text)
+              ]);
+              if (extractedSkills) skillData = extractedSkills;
+              if (extractedExp) experienceData = extractedExp;
+            } catch {
+              // Fallback if re-extraction fails
+            }
+          }
+
+          if ((!skillData.skills || skillData.skills.length === 0) && match) {
+            const allMatchedSkills = Array.from(new Set([
+              ...(match.matched_required_skills || []),
+              ...(match.matched_preferred_skills || [])
+            ]));
+            skillData = { skills: allMatchedSkills, details: [], categories_found: [] };
+          }
+
+          const parseData = {
+            id: res.id,
+            filename: res.filename,
+            file_type: res.file_type,
+            character_count: res.character_count,
+            page_count: res.page_count,
+            extracted_text: res.extracted_text || ''
+          };
+
+          const roleData = {
+            predicted_role: res.predicted_role || 'Unknown',
+            confidence: res.role_model_score ?? null
+          };
+
+          setAnalysisData({
+            parseData,
+            roleData,
+            skillData,
+            experienceData
+          });
+          setHasAnalyzed(true);
+          setIsRestored(true);
+          setRestoredFilename(res.filename);
+        }
+
+        if (job && job.job_description) {
+          setJobText(job.job_description);
+          if (!res) {
+            setIsRestored(true);
+            setRestoredFilename('Job Description');
+          }
+        }
+
+        if (match && match.overall_score !== undefined) {
+          setMatchData(match);
+        }
+      } catch (err) {
+        console.warn('Analysis restoration failed:', err);
+      }
+    }
+
+    restoreLatestContext();
+  }, []);
+
   const handleFileSelect = (file) => {
     setSelectedFile(file);
     setErrorMessage('');
@@ -29,6 +125,8 @@ export default function App() {
     setAnalysisData(null);
     setMatchData(null);
     setMatchError('');
+    setIsRestored(false);
+    setRestoredFilename('');
   };
 
   const handleFileRemove = () => {
@@ -38,6 +136,20 @@ export default function App() {
     setAnalysisData(null);
     setMatchData(null);
     setMatchError('');
+    setIsRestored(false);
+    setRestoredFilename('');
+  };
+
+  const handleClearRestored = () => {
+    setSelectedFile(null);
+    setErrorMessage('');
+    setHasAnalyzed(false);
+    setAnalysisData(null);
+    setJobText('');
+    setMatchData(null);
+    setMatchError('');
+    setIsRestored(false);
+    setRestoredFilename('');
   };
 
   const handleAnalyze = async () => {
@@ -48,6 +160,8 @@ export default function App() {
     setHasAnalyzed(false);
     setMatchData(null);
     setMatchError('');
+    setIsRestored(false);
+    setRestoredFilename('');
 
     try {
       // Step 1: Parse uploaded document via FastAPI backend
@@ -137,10 +251,13 @@ export default function App() {
                 onFileRemove={handleFileRemove}
                 errorMessage={errorMessage}
                 setErrorMessage={setErrorMessage}
+                isRestored={isRestored}
+                restoredFilename={restoredFilename}
+                onClearRestored={handleClearRestored}
               />
 
               <AnalysisButton
-                disabled={!selectedFile || Boolean(errorMessage)}
+                disabled={(!selectedFile && !isRestored) || Boolean(errorMessage)}
                 isAnalyzing={isAnalyzing}
                 onClick={handleAnalyze}
               />
