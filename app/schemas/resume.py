@@ -4,6 +4,27 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
+class ExperienceExtractRequest(BaseModel):
+    """Request payload schema for experience extraction."""
+    text: str = Field(..., description="Raw resume text string")
+
+
+class ExperienceExtractionResult(BaseModel):
+    """Structured response schema for extracted candidate work experience."""
+    candidate_experience_years: Optional[float] = Field(
+        default=None,
+        description="Total extracted work experience in years"
+    )
+    evidence: list[str] = Field(
+        default_factory=list,
+        description="Extracted evidence snippets for work experience"
+    )
+    confidence: str = Field(
+        default="low",
+        description="Confidence level of experience extraction ('high', 'medium', 'low')"
+    )
+
+
 class ResumeParseResponse(BaseModel):
     """Structured response schema for parsed resume document."""
     filename: str = Field(..., description="Original filename of the uploaded document")
@@ -14,3 +35,8 @@ class ResumeParseResponse(BaseModel):
         default=None,
         description="Total page count for PDF documents. Null for DOCX documents."
     )
+    experience: Optional[ExperienceExtractionResult] = Field(
+        default=None,
+        description="Optional extracted candidate experience result"
+    )
+

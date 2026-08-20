@@ -6,6 +6,7 @@ export default function ResultsSection({ hasAnalyzed, isAnalyzing, analysisData,
   const parseData = analysisData?.parseData;
   const roleData = analysisData?.roleData;
   const skillData = analysisData?.skillData;
+  const experienceData = analysisData?.experienceData;
 
   const hasMatchResults = Boolean(matchData);
 
@@ -309,6 +310,14 @@ export default function ResultsSection({ hasAnalyzed, isAnalyzing, analysisData,
                 <div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Page Count</div>
                   <div style={{ fontWeight: '600', fontSize: '0.9375rem', color: 'var(--color-text-primary)' }}>{parseData.page_count ?? 'N/A (DOCX)'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Candidate Experience</div>
+                  <div style={{ fontWeight: '600', fontSize: '0.9375rem', color: 'var(--color-text-primary)' }}>
+                    {experienceData?.candidate_experience_years !== null && experienceData?.candidate_experience_years !== undefined
+                      ? `${experienceData.candidate_experience_years} years`
+                      : 'Not available'}
+                  </div>
                 </div>
                 {hasMatchResults && matchData.experience_assessment && (
                   <div>

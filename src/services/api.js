@@ -103,6 +103,32 @@ export async function extractSkills(text) {
 }
 
 /**
+ * Extracts candidate work experience from resume text.
+ * Endpoint: POST /api/v1/resume/experience
+ *
+ * @param {string} text - Extracted resume text
+ * @returns {Promise<{candidate_experience_years: number|null, evidence: string[], confidence: string}>}
+ */
+export async function extractExperience(text) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/resume/experience`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ text }),
+    });
+    return await handleResponse(response);
+  } catch (error) {
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Unable to connect to experience extraction service.');
+    }
+    throw error;
+  }
+}
+
+
+/**
  * Processes raw job description text into structured job requirements.
  * Endpoint: POST /api/v1/job-description/process
  *

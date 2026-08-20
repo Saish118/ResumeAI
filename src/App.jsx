@@ -5,7 +5,7 @@ import ResumeUploader from './components/ResumeUploader';
 import AnalysisButton from './components/AnalysisButton';
 import JobDescriptionInput from './components/JobDescriptionInput';
 import ResultsSection from './components/ResultsSection';
-import { parseResume, predictRole, extractSkills, processJobDescription, matchResumeToJob } from './services/api';
+import { parseResume, predictRole, extractSkills, extractExperience, processJobDescription, matchResumeToJob } from './services/api';
 
 export default function App() {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -55,16 +55,18 @@ export default function App() {
         throw new Error('No readable text could be extracted from the uploaded document.');
       }
 
-      // Step 2 & 3: Run Role Classification and Skill Extraction in parallel
-      const [roleData, skillData] = await Promise.all([
+      // Step 2, 3 & 4: Run Role Classification, Skill Extraction, and Experience Extraction in parallel
+      const [roleData, skillData, experienceData] = await Promise.all([
         predictRole(parseData.extracted_text),
         extractSkills(parseData.extracted_text),
+        extractExperience(parseData.extracted_text),
       ]);
 
       setAnalysisData({
         parseData,
         roleData,
         skillData,
+        experienceData,
       });
       setHasAnalyzed(true);
     } catch (err) {
@@ -89,7 +91,7 @@ export default function App() {
       const resumeInput = {
         skills: analysisData.skillData.skills || [],
         extracted_skills: analysisData.skillData.extracted_skills || analysisData.skillData.details || [],
-        candidate_experience_years: null,
+        candidate_experience_years: analysisData.experienceData?.candidate_experience_years ?? null,
       };
 
       const jobInput = {

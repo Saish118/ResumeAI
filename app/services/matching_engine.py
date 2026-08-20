@@ -48,7 +48,7 @@ class MatchingEngine:
         return matched_req, missing_req, matched_pref, missing_pref
 
     def evaluate_experience(
-        self, candidate_years: Optional[int], required_years: Optional[int]
+        self, candidate_years: Optional[float], required_years: Optional[int]
     ) -> Tuple[ExperienceAssessment, float, bool]:
         """
         Assesses experience fit and returns ExperienceAssessment, sub-score (0-100), and boolean flag if active.

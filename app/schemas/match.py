@@ -14,7 +14,7 @@ class ResumeDataInput(BaseModel):
         default_factory=list,
         description="Detailed extracted skills with evidence snippets"
     )
-    candidate_experience_years: Optional[int] = Field(
+    candidate_experience_years: Optional[float] = Field(
         default=None,
         description="Total years of candidate experience if available"
     )
@@ -44,7 +44,7 @@ class MatchRequest(BaseModel):
 class ExperienceAssessment(BaseModel):
     """Assessment of candidate experience against job requirements."""
     required_years: Optional[int] = Field(default=None, description="Required minimum years of experience")
-    candidate_years: Optional[int] = Field(default=None, description="Candidate years of experience")
+    candidate_years: Optional[float] = Field(default=None, description="Candidate years of experience")
     meets_requirement: Optional[bool] = Field(
         default=None,
         description="True if candidate meets or exceeds required years, False if below, None if unknown"
