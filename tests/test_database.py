@@ -12,36 +12,15 @@ from app.db.models import ResumeAnalysis, JobAnalysis, MatchAnalysis
 
 
 @pytest.fixture
-def test_db_session() -> Session:
-    """Provides an isolated in-memory SQLite database session for testing."""
-    test_engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(bind=test_engine)
-    TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
-    session = TestSessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
-        Base.metadata.drop_all(bind=test_engine)
+def test_db_session(db_isolation: Session) -> Session:
+    """Provides an isolated database session for testing."""
+    return db_isolation
 
 
 @pytest.fixture
-def db_client(test_db_session: Session) -> TestClient:
-    """Provides a FastAPI TestClient that overrides get_db dependency with test database session."""
-    def override_get_db():
-        try:
-            yield test_db_session
-        finally:
-            pass
-
-    app.dependency_overrides[get_db] = override_get_db
-    client = TestClient(app)
-    yield client
-    app.dependency_overrides.clear()
+def db_client(client: TestClient) -> TestClient:
+    """Provides a FastAPI TestClient configured with test database isolation."""
+    return client
 
 
 def test_database_connection_and_table_creation(test_db_session: Session):

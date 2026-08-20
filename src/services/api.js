@@ -162,7 +162,7 @@ export async function processJobDescription(text, jobTitle = null) {
  * @param {Object} jobData - Job input data matching JobDataInput schema
  * @returns {Promise<{overall_score: number, matched_required_skills: string[], missing_required_skills: string[], matched_preferred_skills: string[], missing_preferred_skills: string[], experience_assessment: Object, semantic_evidence_matches: Array, summary: string}>}
  */
-export async function matchResumeToJob(resumeData, jobData) {
+export async function matchResumeToJob(resumeData, jobData, resumeAnalysisId = null, jobAnalysisId = null) {
   try {
     const response = await fetch(`${API_BASE_URL}/api/v1/match`, {
       method: 'POST',
@@ -172,6 +172,8 @@ export async function matchResumeToJob(resumeData, jobData) {
       body: JSON.stringify({
         resume: resumeData,
         job: jobData,
+        resume_analysis_id: resumeAnalysisId,
+        job_analysis_id: jobAnalysisId,
       }),
     });
     return await handleResponse(response);
@@ -182,3 +184,80 @@ export async function matchResumeToJob(resumeData, jobData) {
     throw error;
   }
 }
+
+/**
+ * Fetches recent resume analysis history records.
+ * Endpoint: GET /api/v1/history/resumes
+ *
+ * @param {number} [limit=50] - Number of history items to return
+ * @returns {Promise<Array>}
+ */
+export async function getResumeHistory(limit = 50) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/history/resumes?limit=${limit}`);
+    return await handleResponse(response);
+  } catch (error) {
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Unable to connect to history service.');
+    }
+    throw error;
+  }
+}
+
+/**
+ * Fetches recent job description analysis history records.
+ * Endpoint: GET /api/v1/history/jobs
+ *
+ * @param {number} [limit=50] - Number of history items to return
+ * @returns {Promise<Array>}
+ */
+export async function getJobHistory(limit = 50) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/history/jobs?limit=${limit}`);
+    return await handleResponse(response);
+  } catch (error) {
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Unable to connect to history service.');
+    }
+    throw error;
+  }
+}
+
+/**
+ * Fetches recent match evaluation history records.
+ * Endpoint: GET /api/v1/history/matches
+ *
+ * @param {number} [limit=50] - Number of history items to return
+ * @returns {Promise<Array>}
+ */
+export async function getMatchHistory(limit = 50) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/history/matches?limit=${limit}`);
+    return await handleResponse(response);
+  } catch (error) {
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Unable to connect to history service.');
+    }
+    throw error;
+  }
+}
+
+/**
+ * Fetches a single detailed match evaluation record by ID.
+ * Endpoint: GET /api/v1/history/matches/{matchId}
+ *
+ * @param {number} matchId - Database ID of match record
+ * @returns {Promise<Object>}
+ */
+export async function getMatchHistoryDetail(matchId) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/history/matches/${matchId}`);
+    return await handleResponse(response);
+  } catch (error) {
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Unable to connect to history service.');
+    }
+    throw error;
+  }
+}
+

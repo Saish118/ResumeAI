@@ -5,9 +5,11 @@ import ResumeUploader from './components/ResumeUploader';
 import AnalysisButton from './components/AnalysisButton';
 import JobDescriptionInput from './components/JobDescriptionInput';
 import ResultsSection from './components/ResultsSection';
+import HistoryPage from './components/HistoryPage';
 import { parseResume, predictRole, extractSkills, extractExperience, processJobDescription, matchResumeToJob } from './services/api';
 
 export default function App() {
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedFile, setSelectedFile] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -102,8 +104,13 @@ export default function App() {
         requirements: processedJob.requirements || [],
       };
 
-      // Step 3: Compute match analysis via FastAPI matching engine
-      const matchResult = await matchResumeToJob(resumeInput, jobInput);
+      // Step 3: Compute match analysis via FastAPI matching engine with database IDs
+      const matchResult = await matchResumeToJob(
+        resumeInput,
+        jobInput,
+        analysisData.parseData?.id || null,
+        processedJob.id || null
+      );
       setMatchData(matchResult);
     } catch (err) {
       setMatchError(err.message || 'An unexpected error occurred during job match analysis.');
@@ -114,44 +121,50 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <Header />
+      <Header activeTab={activeTab} onNavigate={setActiveTab} />
 
       <main className="container">
-        <HeroSection />
+        {activeTab === 'history' ? (
+          <HistoryPage onBackToDashboard={() => setActiveTab('dashboard')} />
+        ) : (
+          <>
+            <HeroSection />
 
-        <div className="upload-container">
-          <ResumeUploader
-            selectedFile={selectedFile}
-            onFileSelect={handleFileSelect}
-            onFileRemove={handleFileRemove}
-            errorMessage={errorMessage}
-            setErrorMessage={setErrorMessage}
-          />
+            <div className="upload-container">
+              <ResumeUploader
+                selectedFile={selectedFile}
+                onFileSelect={handleFileSelect}
+                onFileRemove={handleFileRemove}
+                errorMessage={errorMessage}
+                setErrorMessage={setErrorMessage}
+              />
 
-          <AnalysisButton
-            disabled={!selectedFile || Boolean(errorMessage)}
-            isAnalyzing={isAnalyzing}
-            onClick={handleAnalyze}
-          />
-        </div>
+              <AnalysisButton
+                disabled={!selectedFile || Boolean(errorMessage)}
+                isAnalyzing={isAnalyzing}
+                onClick={handleAnalyze}
+              />
+            </div>
 
-        <JobDescriptionInput
-          jobText={jobText}
-          setJobText={setJobText}
-          onMatchJob={handleMatchJob}
-          hasAnalyzed={hasAnalyzed}
-          isMatching={isMatching}
-          errorMessage={matchError}
-          setErrorMessage={setMatchError}
-        />
+            <JobDescriptionInput
+              jobText={jobText}
+              setJobText={setJobText}
+              onMatchJob={handleMatchJob}
+              hasAnalyzed={hasAnalyzed}
+              isMatching={isMatching}
+              errorMessage={matchError}
+              setErrorMessage={setMatchError}
+            />
 
-        <ResultsSection
-          hasAnalyzed={hasAnalyzed}
-          isAnalyzing={isAnalyzing}
-          analysisData={analysisData}
-          matchData={matchData}
-          isMatching={isMatching}
-        />
+            <ResultsSection
+              hasAnalyzed={hasAnalyzed}
+              isAnalyzing={isAnalyzing}
+              analysisData={analysisData}
+              matchData={matchData}
+              isMatching={isMatching}
+            />
+          </>
+        )}
       </main>
     </div>
   );
