@@ -1,6 +1,7 @@
 """Resume API endpoints for document upload and parsing."""
 
-from fastapi import APIRouter, File, UploadFile, HTTPException, status
+from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, status
+from sqlalchemy.orm import Session
 from app.schemas.resume import (
     ResumeParseResponse,
     ExperienceExtractRequest,
@@ -12,6 +13,9 @@ from app.services.document_parser import (
 )
 from app.services.document_validator import DocumentValidationError
 from app.services.experience_extractor import experience_extractor
+from app.services.role_classifier import role_classifier
+from app.db.database import get_db
+from app.db.models import ResumeAnalysis
 
 router = APIRouter(prefix="/resume", tags=["Resume"])
 
@@ -22,10 +26,14 @@ router = APIRouter(prefix="/resume", tags=["Resume"])
     status_code=status.HTTP_200_OK,
     summary="Upload and parse a resume document (PDF or DOCX)"
 )
-async def parse_resume(file: UploadFile = File(...)) -> ResumeParseResponse:
+async def parse_resume(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+) -> ResumeParseResponse:
     """
     Accepts a resume upload (PDF or DOCX format), validates file format/integrity,
-    extracts the raw text, and returns structured metadata including character and page count.
+    extracts the raw text, predicts job role & candidate experience, persists a ResumeAnalysis record,
+    and returns structured metadata.
     """
     if not file or not file.filename:
         raise HTTPException(
@@ -36,6 +44,33 @@ async def parse_resume(file: UploadFile = File(...)) -> ResumeParseResponse:
     try:
         content = await file.read()
         parsed_result = parse_resume_document(file.filename, content)
+
+        # Run role classification & experience extraction for persistence record
+        role_res = role_classifier.predict_role(parsed_result.extracted_text) if parsed_result.extracted_text else None
+        exp_res = experience_extractor.extract_experience(parsed_result.extracted_text) if parsed_result.extracted_text else None
+
+        # Persist ResumeAnalysis record
+        try:
+            resume_rec = ResumeAnalysis(
+                filename=parsed_result.filename,
+                file_type=parsed_result.file_type,
+                character_count=parsed_result.character_count,
+                page_count=parsed_result.page_count,
+                extracted_text=parsed_result.extracted_text,
+                predicted_role=role_res.predicted_role if role_res else None,
+                role_model_score=role_res.confidence if role_res else None,
+                candidate_experience_years=exp_res.get("candidate_experience_years") if exp_res else None,
+            )
+            db.add(resume_rec)
+            db.commit()
+            db.refresh(resume_rec)
+
+            parsed_result.id = resume_rec.id
+            if exp_res:
+                parsed_result.experience = ExperienceExtractionResult(**exp_res)
+        except Exception:
+            db.rollback()
+
         return parsed_result
     except DocumentValidationError as e:
         raise HTTPException(

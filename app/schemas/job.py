@@ -19,6 +19,7 @@ class JobProcessRequest(BaseModel):
 
 class JobProcessResponse(BaseModel):
     """Structured response containing processed job requirements."""
+    id: Optional[int] = Field(default=None, description="Database record ID if persisted")
     job_title: Optional[str] = Field(default=None, description="Job title if provided")
     required_skills: List[str] = Field(default_factory=list, description="List of required canonical skill names")
     preferred_skills: List[str] = Field(default_factory=list, description="List of preferred canonical skill names")

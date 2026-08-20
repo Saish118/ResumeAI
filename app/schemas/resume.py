@@ -27,6 +27,7 @@ class ExperienceExtractionResult(BaseModel):
 
 class ResumeParseResponse(BaseModel):
     """Structured response schema for parsed resume document."""
+    id: Optional[int] = Field(default=None, description="Database record ID if persisted")
     filename: str = Field(..., description="Original filename of the uploaded document")
     file_type: str = Field(..., description="Normalized document type extension ('pdf' or 'docx')")
     extracted_text: str = Field(..., description="Raw text extracted from the document")

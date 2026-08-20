@@ -39,6 +39,8 @@ class MatchRequest(BaseModel):
     """Request payload for matching structured resume data against job data."""
     resume: ResumeDataInput = Field(..., description="Candidate resume structured data")
     job: JobDataInput = Field(..., description="Job requirements structured data")
+    resume_analysis_id: Optional[int] = Field(default=None, description="Optional stored ResumeAnalysis ID")
+    job_analysis_id: Optional[int] = Field(default=None, description="Optional stored JobAnalysis ID")
 
 
 class ExperienceAssessment(BaseModel):
@@ -68,6 +70,9 @@ class SemanticEvidenceMatch(BaseModel):
 
 class MatchResponse(BaseModel):
     """Structured response containing explainable match analysis and overall score."""
+    id: Optional[int] = Field(default=None, description="Database record ID if persisted")
+    resume_analysis_id: Optional[int] = Field(default=None, description="Linked ResumeAnalysis ID")
+    job_analysis_id: Optional[int] = Field(default=None, description="Linked JobAnalysis ID")
     overall_score: float = Field(
         ...,
         description="Overall match score bounded between 0.0 and 100.0",

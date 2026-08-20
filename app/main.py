@@ -9,13 +9,23 @@ from app.api.v1.job import router as job_router
 from app.api.v1.similarity import router as similarity_router
 from app.api.v1.match import router as match_router
 from app.api.v1.role import router as role_router
+from app.api.v1.history import router as history_router
 from app.core.config import settings
+from app.db.database import init_db
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     description=settings.DESCRIPTION,
 )
+
+# Initialize database tables on application startup
+@app.on_event("startup")
+def startup_event():
+    try:
+        init_db()
+    except Exception:
+        pass
 
 # Enable CORS for local React frontend development origins
 app.add_middleware(
@@ -40,3 +50,5 @@ app.include_router(job_router, prefix=settings.API_V1_STR)
 app.include_router(similarity_router, prefix=settings.API_V1_STR)
 app.include_router(match_router, prefix=settings.API_V1_STR)
 app.include_router(role_router, prefix=settings.API_V1_STR)
+app.include_router(history_router, prefix=settings.API_V1_STR)
+

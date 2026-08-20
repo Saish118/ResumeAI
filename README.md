@@ -17,143 +17,107 @@ ResumeAI is an ML/NLP-powered Resume-to-Job Intelligence Platform designed to ex
 - Deduplicates canonical skill outputs while preserving text appearance ordering.
 - Returns canonical skill lists and extensible structured details with evidence snippets for explainability.
 
-### 3. Job Description Processing v1
+### 3. Candidate Work Experience Extraction
+- Analyzes employment date ranges (e.g. `Jan 2022 - Present`, `01/2020 - 12/2022`) and explicit experience statements (`3+ years of experience`).
+- Scopes extraction to work experience sections and merges overlapping employment intervals to calculate accurate total candidate experience years.
+- Handles internships, freshers, current jobs, and ambiguous date patterns (defaulting to `null`).
+
+### 4. Job Description Processing v1
 - Ingests raw job description text and an optional job title, converting it into structured job requirements.
 - Reuses the shared skill taxonomy and extraction engine without duplicating skill rules.
 - Classifies extracted skills into **Required** (e.g. `required`, `must have`, `essential`) vs. **Preferred** (e.g. `preferred`, `nice to have`, `bonus`, `plus`).
 - Extracts numeric minimum years of experience using pattern matching (e.g. `2+ years`, `3-5 years`, `minimum 4 years`).
 - Generates sentence-level evidence snippets for each requirement.
 
-### 4. Semantic Similarity Service v1
+### 5. Semantic Similarity Service v1
 - Computes dense vector embeddings and cosine similarity between text strings using `sentence-transformers`.
-- Uses pre-trained model **`all-MiniLM-L6-v2`** to capture semantic meaning beyond exact keyword matching (e.g., matching "Built REST APIs using FastAPI" with "Developed backend services").
+- Uses pre-trained model **`all-MiniLM-L6-v2`** to capture semantic meaning beyond exact keyword matching.
 - Leverages a lazy singleton pattern to load model weights once and reuse them across requests.
-- Returns normalized similarity scores (`0.0` to `1.0`) with graceful handling for empty/whitespace inputs.
 
-### 5. Resume ↔ Job Matching Engine v1
+### 6. Resume ↔ Job Matching Engine v1
 - Compares structured resume data against job description requirements to compute an explainable overall match analysis bounded between **0 and 100**.
-- **Exact Skill Matching**: Evaluates canonical skill overlap, producing lists of matched/missing required skills and matched/missing preferred skills.
-- **Experience Fit Assessment**: Compares candidate experience against minimum required years (`matched`, `below_requirement`, or `unknown` when unavailable).
+- **Exact Skill Matching**: Evaluates canonical skill overlap (matched/missing required & preferred skills).
+- **Experience Fit Assessment**: Compares candidate experience against minimum required years (`matched`, `below_requirement`, or `unknown`).
 - **Requirement-Level Semantic Evidence Matching**: Computes sentence-level semantic similarity between job requirements and candidate resume evidence snippets.
-- **Configurable Scoring Weights**:
-  - Required Skills: **50%**
-  - Preferred Skills: **20%**
-  - Semantic Evidence: **20%**
-  - Experience Fit: **10%**
-  > **Note on Initial Baseline Weights**: The default weights are initial configurable baseline heuristic assumptions and will require empirical evaluation and tuning against real-world candidate benchmark data in future iterations.
 
-### 6. ML Role Classification Service v1
-- Predicts a candidate's likely job role category (across 24 taxonomy categories) using a trained **TF-IDF + Logistic Regression** machine learning pipeline.
-- Loads the pre-trained pipeline artifact (`models/role_classifier.joblib`) via lazy singleton loading to prevent retraining or reloading per request.
-- **Baseline Evaluation Results**:
-  - **Test Accuracy**: **64.79%** (`0.6479`)
-  - **Macro F1 Score**: **0.60**
-  - **Weighted F1 Score**: **0.63**
+### 7. PostgreSQL Persistence & History APIs
+- Persists structured records for `ResumeAnalysis`, `JobAnalysis`, and `MatchAnalysis` with foreign key relationships.
+- Exposes queryable history API endpoints (`GET /api/v1/history/resumes`, `/jobs`, `/matches`, `/matches/{id}`).
+- Uses SQLAlchemy 2.x ORM with `psycopg3` driver and environment-driven `DATABASE_URL` configuration.
 
-### 7. React + Vite Web Dashboard (Frontend Shell & Upload UI)
-- Clean, light, professional user interface built with **React 18** and **Vite**.
-- Simple hero messaging: *"Understand Your Resume. Match Better Jobs."*
-- Interactive drag-and-drop resume upload zone supporting **PDF** and **DOCX** documents up to 10MB.
-- File status display card with file size formatting and clear remove/change actions.
-- Client-side validation for unsupported file types and size limits with clean user alerts.
-- Structured analysis result cards prepared for future backend data (*Predicted Role*, *Job Match Score*, *Skills Found*, *Missing Skills*, *Key Insights*).
+---
 
-## Project Structure
+## Local PostgreSQL Setup & Configuration
 
+### 1. Install PostgreSQL (macOS via Homebrew)
+If PostgreSQL is not already installed:
+```bash
+brew install postgresql@16
 ```
-ResumeAI/
-├── .gitignore          # Git ignore rules for Python, Node, macOS, IDEs, and model artifacts
-├── README.md           # Project documentation and quickstart guide
-├── requirements.txt    # Python backend dependencies
-├── package.json        # Node frontend dependencies & build scripts
-├── vite.config.js      # Vite dev server and build configuration
-├── index.html          # HTML entry point with Inter typography
-├── src/                # Frontend React source code
-│   ├── main.jsx        # React entry point
-│   ├── App.jsx         # Main application container
-│   ├── index.css       # Clean Vanilla CSS design system
-│   └── components/
-│       ├── Header.jsx          # Header with logo & minimal navigation
-│       ├── HeroSection.jsx     # Clean hero copy section
-│       ├── ResumeUploader.jsx  # Drag-and-drop & file upload card
-│       ├── AnalysisButton.jsx  # Primary action button with spinner
-│       ├── ResultCard.jsx      # Reusable result card container
-│       └── ResultsSection.jsx  # 5 structured result placeholder cards
-├── app/                # Python FastAPI Backend
-│   ├── main.py         # FastAPI application entry point
-│   ├── api/v1/         # Endpoint routers (health, resume, skill, job, similarity, match, role)
-│   ├── core/           # Config & taxonomy
-│   ├── schemas/        # Pydantic request/response schemas
-│   └── services/       # Parsing, extraction, matching & ML services
-├── models/
-│   └── role_classifier.joblib  # Serialized scikit-learn pipeline artifact (git-ignored)
-└── tests/              # Pytest backend test suite (71 passing tests)
+
+### 2. Start PostgreSQL Service
+```bash
+brew services start postgresql@16
 ```
+
+### 3. Create ResumeAI Database
+```bash
+createdb resumeai
+```
+
+### 4. Configure Environment Variables
+Copy `.env.example` to `.env` and set your local PostgreSQL database URL:
+```bash
+cp .env.example .env
+```
+Edit `.env`:
+```env
+DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/resumeai
+```
+*(Note: Do NOT commit `.env` to Git. `.env` is ignored in `.gitignore`.)*
+
+### 5. Start Backend Server & Verify Database Connection
+```bash
+uvicorn app.main:app --reload --port 8000
+```
+On application startup, SQLAlchemy will automatically initialize all required database tables (`resume_analyses`, `job_analyses`, `match_analyses`).
+
+---
 
 ## Quickstart Guide
 
 ### 1. Frontend Web App (React + Vite)
-
-#### Prerequisites
-- Node.js 18+ and `npm` installed on your system.
-
-#### Install Frontend Dependencies
 ```bash
 npm install
-```
-
-#### Run Frontend Development Server
-```bash
 npm run dev
 ```
-The frontend dev server will start at `http://localhost:3000`.
-
-#### Build Frontend for Production
-```bash
-npm run build
-```
-Generates production-optimized bundle files in `dist/`.
-
----
 
 ### 2. Backend Server (FastAPI)
-
-#### Prerequisites
-- Python 3.9+ installed on your system.
-
-#### Create & Activate Virtual Environment
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-```
-
-#### Install Backend Dependencies
-```bash
 pip install -r requirements.txt
-```
-
-#### Train Model Artifact (Offline Script)
-```bash
-python ml_training.py
-```
-
-#### Run the Backend Server
-```bash
 uvicorn app.main:app --reload --port 8000
 ```
-The backend server will start at `http://127.0.0.1:8000`.
 
-#### Run Automated Tests
+### 3. Run Automated Tests
 ```bash
 pytest -v
 ```
 
-### 3. API Endpoints Overview
-- **Health Check**: `GET http://127.0.0.1:8000/health`
-- **Resume Parse Endpoint**: `POST http://127.0.0.1:8000/api/v1/resume/parse`
-- **Skill Extraction Endpoint**: `POST http://127.0.0.1:8000/api/v1/resume/skills`
-- **Job Description Processing Endpoint**: `POST http://127.0.0.1:8000/api/v1/job-description/process`
-- **Semantic Similarity Endpoint**: `POST http://127.0.0.1:8000/api/v1/similarity`
-- **Resume ↔ Job Match Endpoint**: `POST http://127.0.0.1:8000/api/v1/match`
-- **ML Role Classification Endpoint**: `POST http://127.0.0.1:8000/api/v1/role/predict`
+---
+
+## API Endpoints Overview
+- **Health Check**: `GET /health`
+- **Resume Parse Endpoint**: `POST /api/v1/resume/parse`
+- **Experience Extraction Endpoint**: `POST /api/v1/resume/experience`
+- **Skill Extraction Endpoint**: `POST /api/v1/resume/skills`
+- **Job Description Processing Endpoint**: `POST /api/v1/job-description/process`
+- **Semantic Similarity Endpoint**: `POST /api/v1/similarity`
+- **Resume ↔ Job Match Endpoint**: `POST /api/v1/match`
+- **ML Role Classification Endpoint**: `POST /api/v1/role/predict`
+- **Resume Analysis History**: `GET /api/v1/history/resumes`
+- **Job Description History**: `GET /api/v1/history/jobs`
+- **Match Evaluation History**: `GET /api/v1/history/matches`
+- **Match Record Detail**: `GET /api/v1/history/matches/{match_id}`
 - **Interactive OpenAPI Documentation**: `http://127.0.0.1:8000/docs`
