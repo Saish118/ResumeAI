@@ -1,5 +1,6 @@
 """Unit tests for JobProcessor service."""
 
+# pyrefly: ignore [missing-import]
 import pytest
 from app.schemas.job import JobProcessRequest
 from app.services.job_processor import JobProcessor

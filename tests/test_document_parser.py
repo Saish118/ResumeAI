@@ -1,5 +1,6 @@
 """Unit tests for document validator and document parser service."""
 
+# pyrefly: ignore [missing-import]
 import pytest
 from app.services.document_validator import validate_resume_file, DocumentValidationError
 from app.services.document_parser import (

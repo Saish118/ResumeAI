@@ -208,6 +208,7 @@ export default function App() {
         skills: analysisData.skillData.skills || [],
         extracted_skills: analysisData.skillData.extracted_skills || analysisData.skillData.details || [],
         candidate_experience_years: analysisData.experienceData?.candidate_experience_years ?? null,
+        raw_text: analysisData.parseData?.extracted_text || null,
       };
 
       const jobInput = {

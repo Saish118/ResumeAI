@@ -1,5 +1,6 @@
 """Integration tests for POST /api/v1/resume/skills API endpoint."""
 
+# pyrefly: ignore [missing-import]
 from fastapi.testclient import TestClient
 
 

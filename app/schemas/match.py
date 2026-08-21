@@ -18,6 +18,10 @@ class ResumeDataInput(BaseModel):
         default=None,
         description="Total years of candidate experience if available"
     )
+    raw_text: Optional[str] = Field(
+        default=None,
+        description="Raw full candidate resume text for sentence-level evidence extraction"
+    )
 
 
 class JobDataInput(BaseModel):
@@ -64,6 +68,8 @@ class SemanticEvidenceMatch(BaseModel):
     )
     similarity_score: float = Field(
         ...,
+        ge=0.0,
+        le=1.0,
         description="Semantic similarity score between requirement and resume evidence (0.0 to 1.0)"
     )
 

@@ -8,6 +8,9 @@ from app.schemas.match import (
     SemanticEvidenceMatch,
 )
 from app.services.similarity_service import similarity_service, SimilarityService
+from app.services.snippet_extractor import snippet_extractor, SnippetExtractor
+
+DEFAULT_SIMILARITY_THRESHOLD = 0.35
 
 
 class MatchingEngine:
@@ -20,16 +23,20 @@ class MatchingEngine:
     def __init__(
         self,
         similarity_svc: Optional[SimilarityService] = None,
+        snippet_ext: Optional[SnippetExtractor] = None,
         weight_required_skills: float = 0.50,
         weight_preferred_skills: float = 0.20,
         weight_semantic_evidence: float = 0.20,
         weight_experience: float = 0.10,
+        similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
     ):
         self.similarity_svc = similarity_svc or similarity_service
+        self.snippet_extractor = snippet_ext or snippet_extractor
         self.w_required = weight_required_skills
         self.w_preferred = weight_preferred_skills
         self.w_semantic = weight_semantic_evidence
         self.w_experience = weight_experience
+        self.similarity_threshold = similarity_threshold
 
     def evaluate_exact_skills(
         self, candidate_skills: List[str], required_skills: List[str], preferred_skills: List[str]
@@ -78,44 +85,118 @@ class MatchingEngine:
         )
         return assessment, score, True
 
+    def extract_candidate_snippets(self, match_request: MatchRequest) -> List[str]:
+        """
+        Extracts clean, distinct candidate resume snippets from raw text and extracted skill details.
+        """
+        snippets: List[str] = []
+        seen_lower = set()
+
+        # 1. Extract snippets from raw resume text if available
+        if match_request.resume.raw_text:
+            text_snippets = self.snippet_extractor.extract_snippets_from_text(match_request.resume.raw_text)
+            for snip in text_snippets:
+                low = snip.lower()
+                if low not in seen_lower:
+                    seen_lower.add(low)
+                    snippets.append(snip)
+
+        # 2. Extract snippets from extracted skill details evidence if available
+        if match_request.resume.extracted_skills:
+            for skill_detail in match_request.resume.extracted_skills:
+                if skill_detail.evidence:
+                    skill_snips = self.snippet_extractor.extract_snippets_from_text(skill_detail.evidence)
+                    for snip in skill_snips:
+                        low = snip.lower()
+                        if low not in seen_lower:
+                            seen_lower.add(low)
+                            snippets.append(snip)
+
+        return snippets
+
     def evaluate_semantic_evidence(
         self, match_request: MatchRequest
     ) -> Tuple[List[SemanticEvidenceMatch], float]:
         """
-        Performs requirement-level semantic evidence matching between job requirements and resume evidence.
+        Performs requirement-level semantic evidence matching between job requirements and candidate resume evidence.
         """
         job_reqs = match_request.job.requirements
-        resume_skills = match_request.resume.extracted_skills
 
         if not job_reqs:
             return [], 100.0
+
+        candidate_snippets = self.extract_candidate_snippets(match_request)
 
         semantic_matches: List[SemanticEvidenceMatch] = []
         scores: List[float] = []
 
         for req in job_reqs:
+            req_text = (req.evidence or req.skill or "").strip()
+            if not req_text:
+                semantic_matches.append(
+                    SemanticEvidenceMatch(
+                        requirement_skill=req.skill,
+                        requirement_evidence=req.evidence or "",
+                        best_matching_resume_evidence=None,
+                        similarity_score=0.0,
+                    )
+                )
+                scores.append(0.0)
+                continue
+
             best_evidence: Optional[str] = None
             best_sim_score: float = 0.0
 
-            if resume_skills:
-                for cand_skill in resume_skills:
-                    if cand_skill.evidence:
-                        res = self.similarity_svc.compute_similarity(
-                            req.evidence, cand_skill.evidence
-                        )
-                        if res.similarity_score > best_sim_score:
-                            best_sim_score = res.similarity_score
-                            best_evidence = cand_skill.evidence
+            if candidate_snippets:
+                for snippet in candidate_snippets:
+                    snippet_lower = snippet.lower()
+                    sim_ev = self.similarity_svc.compute_similarity(req_text, snippet).similarity_score
+                    sim_skill = (
+                        self.similarity_svc.compute_similarity(req.skill, snippet).similarity_score
+                        if req.skill
+                        else 0.0
+                    )
+                    score = max(sim_ev, sim_skill)
+
+                    # Boost score if candidate snippet explicitly contains the skill name
+                    if req.skill and len(req.skill.strip()) > 1 and req.skill.lower() in snippet_lower:
+                        score = max(score, 0.50)
+
+                    # For REST API / API requirements, prefer specific implementation/project bullets over generic summary lines
+                    is_api_req = any(
+                        k in (req.skill or "").lower() or k in req_text.lower()
+                        for k in ["rest api", "api", "fastapi", "backend service"]
+                    )
+                    if is_api_req:
+                        api_keywords = {"rest api", "rest apis", "fastapi", "backend apis", "backend api", "api development", "api services", "microservices"}
+                        matched_kw = sum(1 for kw in api_keywords if kw in snippet_lower)
+                        if matched_kw > 0 and not snippet_lower.startswith(("software engineer with", "summary", "profile")):
+                            score += 0.15 * matched_kw
+
+                    # Ensure candidate snippet score is strictly bounded in normalized range [0.0, 1.0]
+                    score = min(max(score, 0.0), 1.0)
+
+                    if score > best_sim_score:
+                        best_sim_score = score
+                        best_evidence = snippet
+
+            # Apply similarity threshold and guarantee final score is bounded in [0.0, 1.0]
+            if best_sim_score >= self.similarity_threshold:
+                final_evidence = best_evidence
+                final_score = min(max(best_sim_score, 0.0), 1.0)
+            else:
+                final_evidence = None
+                final_score = 0.0
 
             semantic_matches.append(
                 SemanticEvidenceMatch(
                     requirement_skill=req.skill,
-                    requirement_evidence=req.evidence,
-                    best_matching_resume_evidence=best_evidence,
-                    similarity_score=best_sim_score,
+                    requirement_evidence=req.evidence or req_text,
+                    best_matching_resume_evidence=final_evidence,
+                    similarity_score=final_score,
                 )
             )
-            scores.append(best_sim_score)
+            scores.append(final_score)
 
         avg_sim_score = (sum(scores) / len(scores)) if scores else 1.0
         sub_score = avg_sim_score * 100.0

@@ -6,6 +6,11 @@ from app.core.taxonomy import SKILL_TAXONOMY
 from app.schemas.skill import SkillDetail, SkillExtractResponse
 
 
+BULLET_PREFIX_PATTERN = re.compile(
+    r"^\s*(?:[\u2022\u2023\u25b6\u25c0\u25ba\u25c4\u25cf\u25cb\u25e6\u25aa\u25ab\u25fe\u25fd\*\-\+\▪\►\–\—]|\d+[\.\)]|[a-zA-Z][\.\)])\s*"
+)
+
+
 class SkillExtractor:
     """Taxonomy-based skill extractor with boundary-safe matching."""
 
@@ -67,6 +72,51 @@ class SkillExtractor:
             return SkillExtractResponse(skills=[], extracted_skills=[])
 
         # Map canonical_skill -> best match info: (first_start_index, matched_alias, category, evidence)
+    def _get_full_sentence_or_line(self, text: str, start_pos: int, end_pos: int) -> str:
+        """
+        Locates the full, untruncated sentence or bullet line in raw text containing the match position range.
+        Ensures no arbitrary character window slicing occurs.
+        """
+        if not text:
+            return ""
+
+        # Find line boundaries around start_pos
+        line_start = text.rfind("\n", 0, start_pos)
+        line_start = 0 if line_start == -1 else line_start + 1
+
+        line_end = text.find("\n", end_pos)
+        line_end = len(text) if line_end == -1 else line_end
+
+        line = text[line_start:line_end].strip()
+
+        # Clean bullet prefix if present
+        line_cleaned = BULLET_PREFIX_PATTERN.sub("", line).strip()
+        line_cleaned = re.sub(r"\s+", " ", line_cleaned)
+
+        # If line contains multiple sentences, locate sentence containing the matched alias
+        sentences = re.split(r"(?<=[.!?])\s+", line_cleaned)
+        if len(sentences) > 1:
+            match_term = text[start_pos:end_pos].lower()
+            for sentence in sentences:
+                if match_term in sentence.lower():
+                    return sentence.strip()
+
+        return line_cleaned.strip()
+
+    def extract_skills(self, text: Optional[str]) -> SkillExtractResponse:
+        """
+        Extracts explicit skills from raw text based on controlled taxonomy.
+
+        Args:
+            text: Raw input text from resume or job description.
+
+        Returns:
+            SkillExtractResponse containing ordered canonical skills list and details.
+        """
+        if not text or not text.strip():
+            return SkillExtractResponse(skills=[], extracted_skills=[])
+
+        # Map canonical_skill -> best match info: (first_start_index, matched_alias, category, evidence)
         canonical_matches: Dict[str, Tuple[int, str, str, str]] = {}
 
         for category, canonical_name, alias, pattern in self._compiled_patterns:
@@ -74,10 +124,8 @@ class SkillExtractor:
                 start_pos, end_pos = match.span()
                 matched_text = text[start_pos:end_pos]
 
-                # Extract context snippet around match
-                snippet_start = max(0, start_pos - 25)
-                snippet_end = min(len(text), end_pos + 25)
-                evidence = text[snippet_start:snippet_end].replace("\n", " ").strip()
+                # Extract full untruncated sentence or line evidence around match
+                evidence = self._get_full_sentence_or_line(text, start_pos, end_pos)
 
                 if canonical_name not in canonical_matches:
                     canonical_matches[canonical_name] = (start_pos, matched_text, category, evidence)

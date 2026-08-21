@@ -1,5 +1,6 @@
 """Integration tests for POST /api/v1/job-description/process API endpoint."""
 
+# pyrefly: ignore [missing-import]
 from fastapi.testclient import TestClient
 
 
