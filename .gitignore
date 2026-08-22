@@ -57,3 +57,7 @@ models/
 .env
 *.db
 
+
+# Temporary ML experiment scripts
+ml_model_experiments.py
+ml_model_tuning.py
