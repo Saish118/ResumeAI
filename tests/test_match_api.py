@@ -77,3 +77,23 @@ def test_match_api_empty_skills_and_missing_experience(client: TestClient):
     assert data["missing_required_skills"] == ["Python"]
     assert data["experience_assessment"]["status"] == "unknown"
     assert 0.0 <= data["overall_score"] <= 100.0
+
+
+def test_match_api_insufficient_job_description(client: TestClient):
+    payload = {
+        "resume": {
+            "skills": ["Python", "FastAPI"]
+        },
+        "job": {
+            "job_title": "Software Developer",
+            "required_skills": [],
+            "preferred_skills": [],
+            "minimum_experience_years": None,
+            "requirements": []
+        }
+    }
+    response = client.post("/api/v1/match", json=payload)
+    assert response.status_code == 400
+    data = response.json()
+    assert "Insufficient job description" in data["detail"]
+

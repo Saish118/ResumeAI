@@ -1,6 +1,6 @@
-"""Modular Resume ↔ Job Matching Engine Service v1."""
-
-from typing import List, Optional, Tuple
+import re
+from typing import List, Optional, Tuple, Set
+from app.core.taxonomy import SKILL_TAXONOMY
 from app.schemas.match import (
     MatchRequest,
     MatchResponse,
@@ -39,18 +39,37 @@ class MatchingEngine:
         self.similarity_threshold = similarity_threshold
 
     def evaluate_exact_skills(
-        self, candidate_skills: List[str], required_skills: List[str], preferred_skills: List[str]
+        self,
+        candidate_skills: List[str],
+        required_skills: List[str],
+        preferred_skills: List[str],
+        candidate_snippets: Optional[List[str]] = None,
     ) -> Tuple[List[str], List[str], List[str], List[str]]:
         """
         Calculates exact canonical skill matches and missing skill lists for required and preferred skills.
+        Supports both taxonomy-recognized skills and non-taxonomy explicit job requirements.
         """
-        cand_set = set(candidate_skills)
+        cand_set_lower = {s.lower() for s in candidate_skills}
 
-        matched_req = [s for s in required_skills if s in cand_set]
-        missing_req = [s for s in required_skills if s not in cand_set]
+        def _is_matched(skill_name: str) -> bool:
+            if not skill_name or not skill_name.strip():
+                return False
+            s_clean = skill_name.strip()
+            s_low = s_clean.lower()
+            if s_low in cand_set_lower:
+                return True
+            if candidate_snippets:
+                skill_aliases = self._get_skill_aliases(s_clean)
+                for snippet in candidate_snippets:
+                    if self._has_skill_mention(snippet, s_clean, skill_aliases):
+                        return True
+            return False
 
-        matched_pref = [s for s in preferred_skills if s in cand_set]
-        missing_pref = [s for s in preferred_skills if s not in cand_set]
+        matched_req = [s for s in required_skills if _is_matched(s)]
+        missing_req = [s for s in required_skills if not _is_matched(s)]
+
+        matched_pref = [s for s in preferred_skills if _is_matched(s)]
+        missing_pref = [s for s in preferred_skills if not _is_matched(s)]
 
         return matched_req, missing_req, matched_pref, missing_pref
 
@@ -114,11 +133,124 @@ class MatchingEngine:
 
         return snippets
 
+    def _get_skill_aliases(self, skill_name: Optional[str]) -> Set[str]:
+        """Returns a set of lowercase aliases for a given skill name using SKILL_TAXONOMY or default bounds."""
+        if not skill_name or not skill_name.strip():
+            return set()
+
+        skill_clean = skill_name.strip()
+        skill_low = skill_clean.lower()
+        aliases = {skill_low}
+
+        for category, skills in SKILL_TAXONOMY.items():
+            for canonical_name, alias_list in skills.items():
+                if canonical_name.lower() == skill_low:
+                    aliases.add(canonical_name.lower())
+                    aliases.update(a.lower() for a in alias_list)
+
+        # Handle specific common tool acronyms / synonyms
+        if skill_low == "aws":
+            aliases.update(["aws", "amazon web services"])
+        elif skill_low == "git":
+            aliases.update(["git", "github"])
+        elif skill_low == "github":
+            aliases.update(["github", "git"])
+        elif skill_low == "gitlab":
+            aliases.update(["gitlab"])
+        elif skill_low == "gcp":
+            aliases.update(["gcp", "google cloud", "google cloud platform"])
+        elif skill_low == "azure":
+            aliases.update(["azure", "microsoft azure"])
+        elif skill_low == "linux":
+            aliases.update(["linux", "unix", "ubuntu", "debian", "centos", "rhel"])
+        elif skill_low == "ci/cd":
+            aliases.update(["ci/cd", "ci-cd", "continuous integration", "continuous deployment"])
+        elif skill_low == "computer vision":
+            aliases.update(["computer vision", "cv", "yolo", "yolov5", "opencv"])
+        elif skill_low in ["photoshop", "adobe photoshop"]:
+            aliases.update(["photoshop", "adobe photoshop"])
+        elif skill_low in ["illustrator", "adobe illustrator"]:
+            aliases.update(["illustrator", "adobe illustrator"])
+        elif skill_low in ["after effects", "adobe after effects"]:
+            aliases.update(["after effects", "adobe after effects"])
+        elif skill_low in ["premiere pro", "adobe premiere pro", "premiere"]:
+            aliases.update(["premiere pro", "adobe premiere pro", "premiere"])
+        elif skill_low in ["ui/ux design", "ui/ux", "user interface design"]:
+            aliases.update(["ui/ux design", "ui/ux", "user interface design"])
+
+        return aliases
+
+    def _is_explicit_technical_skill(self, req_skill: Optional[str], req_text: str) -> bool:
+        """
+        Determines whether a job requirement is for an explicit technology, tool, or skill
+        (e.g., Docker, Terraform, Kubernetes, Linux, AWS, Python, Git, Photoshop, Figma, etc.)
+        versus a broad conceptual requirement (e.g., "backend API development").
+        """
+        if not req_skill or not req_skill.strip():
+            return False
+
+        req_skill_low = req_skill.strip().lower()
+
+        # Check if req_skill is in SKILL_TAXONOMY
+        for category, skills in SKILL_TAXONOMY.items():
+            for canonical_name, alias_list in skills.items():
+                if canonical_name.lower() == req_skill_low or req_skill_low in [a.lower() for a in alias_list]:
+                    return True
+
+        # Common explicit technical, design, and software tools
+        common_tools = {
+            "docker", "terraform", "kubernetes", "k8s", "linux", "gitlab", "gcp",
+            "azure", "ansible", "prometheus", "aws", "python", "git", "github",
+            "react", "mongodb", "postgresql", "fastapi", "django", "flask",
+            "photoshop", "adobe photoshop", "illustrator", "adobe illustrator",
+            "figma", "after effects", "premiere pro", "autocad", "sap", "salesforce",
+            "ui/ux design", "brand identity", "typography", "motion graphics"
+        }
+        if req_skill_low in common_tools or len(req_skill.strip().split()) <= 4:
+            return True
+
+        return False
+
+
+    def _has_skill_mention(self, snippet: str, skill_name: Optional[str], skill_aliases: Set[str]) -> bool:
+        """
+        Checks if snippet explicitly mentions skill_name or any of its taxonomy aliases.
+        Uses boundary-aware regex matching to avoid false positives (e.g. 'java' inside 'javascript').
+        """
+        if not snippet or not (skill_name or skill_aliases):
+            return False
+
+        snippet_lower = snippet.lower()
+        all_targets = set(skill_aliases)
+        if skill_name:
+            all_targets.add(skill_name.strip().lower())
+
+        for target in all_targets:
+            if not target or len(target) < 2:
+                continue
+            escaped = re.escape(target)
+            if target.endswith(("+", "#")):
+                trailing = r"(?![\w\+#])"
+            else:
+                trailing = r"(?![\w\+#]|\.\w)"
+
+            if target.startswith("."):
+                leading = r"(?<![\w\+#\-])"
+            else:
+                leading = r"(?<![\w\+#\.-])"
+
+            pattern = re.compile(leading + escaped + trailing, re.IGNORECASE)
+            if pattern.search(snippet_lower):
+                return True
+
+        return False
+
     def evaluate_semantic_evidence(
         self, match_request: MatchRequest
     ) -> Tuple[List[SemanticEvidenceMatch], float]:
         """
         Performs requirement-level semantic evidence matching between job requirements and candidate resume evidence.
+        Applies high-precision evidence acceptance rules to prevent weak false positives.
         """
         job_reqs = match_request.job.requirements
 
@@ -144,36 +276,60 @@ class MatchingEngine:
                 scores.append(0.0)
                 continue
 
+            is_explicit_tech = self._is_explicit_technical_skill(req.skill, req_text)
+            skill_aliases = self._get_skill_aliases(req.skill) if req.skill else set()
+
             best_evidence: Optional[str] = None
             best_sim_score: float = 0.0
 
             if candidate_snippets:
                 for snippet in candidate_snippets:
                     snippet_lower = snippet.lower()
-                    sim_ev = self.similarity_svc.compute_similarity(req_text, snippet).similarity_score
-                    sim_skill = (
-                        self.similarity_svc.compute_similarity(req.skill, snippet).similarity_score
-                        if req.skill
-                        else 0.0
-                    )
-                    score = max(sim_ev, sim_skill)
+                    has_mention = self._has_skill_mention(snippet, req.skill, skill_aliases)
 
-                    # Boost score if candidate snippet explicitly contains the skill name
-                    if req.skill and len(req.skill.strip()) > 1 and req.skill.lower() in snippet_lower:
-                        score = max(score, 0.50)
+                    # 1. Explicit Technical Skill Requirements (Docker, Terraform, Linux, Kubernetes, etc.):
+                    # Direct skill or alias presence is required for evidence acceptance.
+                    # Semantic similarity alone is NOT sufficient for an unrelated explicit technical skill.
+                    if is_explicit_tech:
+                        if not has_mention:
+                            continue  # Reject snippet as evidence for missing explicit technical skill
 
-                    # For REST API / API requirements, prefer specific implementation/project bullets over generic summary lines
-                    is_api_req = any(
-                        k in (req.skill or "").lower() or k in req_text.lower()
-                        for k in ["rest api", "api", "fastapi", "backend service"]
-                    )
-                    if is_api_req:
-                        api_keywords = {"rest api", "rest apis", "fastapi", "backend apis", "backend api", "api development", "api services", "microservices"}
-                        matched_kw = sum(1 for kw in api_keywords if kw in snippet_lower)
-                        if matched_kw > 0 and not snippet_lower.startswith(("software engineer with", "summary", "profile")):
-                            score += 0.15 * matched_kw
+                        sim_ev = self.similarity_svc.compute_similarity(req_text, snippet).similarity_score
+                        sim_skill = (
+                            self.similarity_svc.compute_similarity(req.skill, snippet).similarity_score
+                            if req.skill
+                            else 0.0
+                        )
+                        score = max(sim_ev, sim_skill, 0.50)
 
-                    # Ensure candidate snippet score is strictly bounded in normalized range [0.0, 1.0]
+                        # Prefer specific project/implementation bullets for API/REST requirements
+                        is_api_req = any(
+                            k in (req.skill or "").lower() or k in req_text.lower()
+                            for k in ["rest api", "api", "fastapi", "backend service"]
+                        )
+                        if is_api_req:
+                            api_keywords = {"rest api", "rest apis", "fastapi", "backend apis", "backend api", "api development", "api services", "microservices"}
+                            matched_kw = sum(1 for kw in api_keywords if kw in snippet_lower)
+                            if matched_kw > 0 and not snippet_lower.startswith(("software engineer with", "summary", "profile")):
+                                score += 0.15 * matched_kw
+
+                    # 2. Conceptual Requirements (e.g. "backend API development"):
+                    # Semantic similarity plays a primary role, requiring a strong threshold (>= 0.45).
+                    else:
+                        sim_ev = self.similarity_svc.compute_similarity(req_text, snippet).similarity_score
+                        sim_skill = (
+                            self.similarity_svc.compute_similarity(req.skill, snippet).similarity_score
+                            if req.skill
+                            else 0.0
+                        )
+                        raw_sim = max(sim_ev, sim_skill)
+                        if has_mention:
+                            score = max(raw_sim, 0.50)
+                        elif raw_sim >= 0.45:
+                            score = raw_sim
+                        else:
+                            continue  # Reject weak generic sentence for conceptual requirement
+
                     score = min(max(score, 0.0), 1.0)
 
                     if score > best_sim_score:
@@ -181,7 +337,7 @@ class MatchingEngine:
                         best_evidence = snippet
 
             # Apply similarity threshold and guarantee final score is bounded in [0.0, 1.0]
-            if best_sim_score >= self.similarity_threshold:
+            if best_sim_score >= self.similarity_threshold and best_sim_score > 0.0:
                 final_evidence = best_evidence
                 final_score = min(max(best_sim_score, 0.0), 1.0)
             else:
@@ -244,10 +400,25 @@ class MatchingEngine:
         resume = request.resume
         job = request.job
 
-        # 1. Exact Skill Matching
+        if not job or (
+            not (job.required_skills and len(job.required_skills) > 0)
+            and not (job.preferred_skills and len(job.preferred_skills) > 0)
+            and job.minimum_experience_years is None
+            and not (job.requirements and len(job.requirements) > 0)
+        ):
+            raise ValueError(
+                "Insufficient job description. Please provide meaningful requirements, "
+                "skills, responsibilities, or experience criteria to calculate a match score."
+            )
+
+        candidate_snippets = self.extract_candidate_snippets(request)
+
+        # 1. Exact Skill Matching (evaluates taxonomy and non-taxonomy skills)
         matched_req, missing_req, matched_pref, missing_pref = self.evaluate_exact_skills(
-            resume.skills, job.required_skills, job.preferred_skills
+            resume.skills, job.required_skills, job.preferred_skills, candidate_snippets
         )
+
+
 
         total_req = len(job.required_skills)
         score_req = (len(matched_req) / total_req * 100.0) if total_req > 0 else 100.0

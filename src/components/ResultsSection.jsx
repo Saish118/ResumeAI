@@ -2,7 +2,7 @@ import React from 'react';
 import { Briefcase, Code, Target, AlertTriangle, Lightbulb, CheckCircle2, XCircle, Award } from 'lucide-react';
 import ResultCard from './ResultCard';
 
-export default function ResultsSection({ hasAnalyzed, isAnalyzing, analysisData, matchData, isMatching }) {
+export default function ResultsSection({ hasAnalyzed, isAnalyzing, analysisData, matchData, matchError, isMatching }) {
   const parseData = analysisData?.parseData;
   const roleData = analysisData?.roleData;
   const skillData = analysisData?.skillData;
@@ -82,10 +82,11 @@ export default function ResultsSection({ hasAnalyzed, isAnalyzing, analysisData,
                 Not available
               </div>
               <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>
-                Target job description required to calculate match score.
+                {matchError ? "Add meaningful job requirements to calculate candidate fit." : "Target job description required to calculate match score."}
               </p>
             </div>
           ) : (
+
             <div className="placeholder-box">
               <p>Results will appear after analysis.</p>
             </div>
@@ -270,7 +271,7 @@ export default function ResultsSection({ hasAnalyzed, isAnalyzing, analysisData,
                 Not available
               </div>
               <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>
-                Target job description required to analyze missing skills.
+                {matchError ? "Add meaningful job requirements to calculate candidate fit." : "Target job description required to analyze missing skills."}
               </p>
             </div>
           ) : (

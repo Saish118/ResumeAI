@@ -198,6 +198,7 @@ export default function App() {
 
     setIsMatching(true);
     setMatchError('');
+    setMatchData(null);
 
     try {
       // Step 1: Process raw job description text via FastAPI backend
@@ -279,6 +280,7 @@ export default function App() {
               isAnalyzing={isAnalyzing}
               analysisData={analysisData}
               matchData={matchData}
+              matchError={matchError}
               isMatching={isMatching}
             />
           </>
@@ -287,3 +289,4 @@ export default function App() {
     </div>
   );
 }
+

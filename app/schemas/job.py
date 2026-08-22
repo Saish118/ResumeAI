@@ -6,9 +6,12 @@ from pydantic import BaseModel, Field
 
 class JobRequirementDetail(BaseModel):
     """Detailed skill requirement extracted from job description."""
-    skill: str = Field(..., description="Canonical name of the skill")
+    skill: str = Field(..., description="Name or canonical name of the skill")
     requirement_type: str = Field(..., description="Requirement classification: 'required' or 'preferred'")
     evidence: str = Field(..., description="Sentence or context snippet indicating the requirement")
+    canonical_name: Optional[str] = Field(default=None, description="Canonical skill name if mapped to taxonomy")
+    recognized_by_taxonomy: bool = Field(default=True, description="True if mapped to skill taxonomy, False if non-taxonomy requirement")
+
 
 
 class JobProcessRequest(BaseModel):

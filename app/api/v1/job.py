@@ -34,6 +34,14 @@ def process_job_description(
     try:
         result = job_processor.process_job_description(request)
 
+        # Validate job description sufficiency
+        is_valid, validation_msg = job_processor.validate_job_description(request.text, result)
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=validation_msg
+            )
+
         # Persist JobAnalysis record
         try:
             job_rec = JobAnalysis(
@@ -52,9 +60,12 @@ def process_job_description(
             db.rollback()
 
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An unexpected error occurred while processing the job description: {str(e)}"
         ) from e
+
 

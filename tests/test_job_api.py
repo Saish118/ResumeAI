@@ -45,15 +45,24 @@ def test_process_job_description_api_empty_text(client: TestClient):
         "text": ""
     }
     response = client.post("/api/v1/job-description/process", json=payload)
-    assert response.status_code == 200
+    assert response.status_code == 400
     data = response.json()
-    assert data["required_skills"] == []
-    assert data["preferred_skills"] == []
-    assert data["minimum_experience_years"] is None
-    assert data["requirements"] == []
+    assert "Insufficient job description" in data["detail"]
+
+
+def test_process_job_description_api_insufficient_jd(client: TestClient):
+    payload = {
+        "job_title": "Software Developer",
+        "text": "Job Title: Software Developer"
+    }
+    response = client.post("/api/v1/job-description/process", json=payload)
+    assert response.status_code == 400
+    data = response.json()
+    assert "Insufficient job description" in data["detail"]
 
 
 def test_process_job_description_api_invalid_payload(client: TestClient):
     # Missing required 'text' field
     response = client.post("/api/v1/job-description/process", json={"job_title": "DevOps Engineer"})
     assert response.status_code == 422
+

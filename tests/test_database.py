@@ -187,3 +187,27 @@ def test_invalid_database_url_handling():
     invalid_engine = create_engine("postgresql+psycopg://invalid_user:invalid_pass@localhost:9999/nonexistent_db")
     with pytest.raises(Exception):
         invalid_engine.connect()
+
+
+def test_invalid_jd_does_not_create_match_analysis_db_record(db_client: TestClient, test_db_session: Session):
+    """Verifies that an invalid/insufficient JD returns HTTP 400 and creates no MatchAnalysis record in DB."""
+    initial_match_count = test_db_session.query(MatchAnalysis).count()
+
+    payload = {
+        "resume": {
+            "skills": ["Python", "FastAPI"]
+        },
+        "job": {
+            "job_title": "Software Developer",
+            "required_skills": [],
+            "preferred_skills": [],
+            "minimum_experience_years": None,
+            "requirements": []
+        }
+    }
+    response = db_client.post("/api/v1/match", json=payload)
+    assert response.status_code == 400
+
+    final_match_count = test_db_session.query(MatchAnalysis).count()
+    assert final_match_count == initial_match_count
+

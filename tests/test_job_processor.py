@@ -115,3 +115,61 @@ def test_multiple_required_and_preferred_skills(processor: JobProcessor):
     assert res.minimum_experience_years == 4
     assert set(res.required_skills) == {"Python", "FastAPI", "PostgreSQL"}
     assert set(res.preferred_skills) == {"Docker", "Kubernetes", "GraphQL"}
+
+
+def test_validate_jd_title_only(processor: JobProcessor):
+    text1 = "Job Title: Software Developer"
+    res1 = processor.process_job_description(JobProcessRequest(text=text1))
+    valid1, reason1 = processor.validate_job_description(text1, res1)
+    assert valid1 is False
+    assert "Insufficient job description" in reason1
+
+    text2 = "Software Engineer"
+    res2 = processor.process_job_description(JobProcessRequest(text=text2))
+    valid2, reason2 = processor.validate_job_description(text2, res2)
+    assert valid2 is False
+    assert "Insufficient job description" in reason2
+
+
+def test_validate_jd_whitespace_only(processor: JobProcessor):
+    text = "   \n\t  "
+    valid, reason = processor.validate_job_description(text)
+    assert valid is False
+    assert "Insufficient job description" in reason
+
+
+def test_validate_jd_title_and_boilerplate(processor: JobProcessor):
+    text = "Job Title: Software Developer. We are hiring! Apply now. Great company to work for."
+    res = processor.process_job_description(JobProcessRequest(text=text))
+    valid, reason = processor.validate_job_description(text, res)
+    assert valid is False
+    assert "Insufficient job description" in reason
+
+
+def test_validate_jd_one_required_skill(processor: JobProcessor):
+    text = "Looking for a developer with Python."
+    res = processor.process_job_description(JobProcessRequest(text=text))
+    valid, reason = processor.validate_job_description(text, res)
+    assert valid is True
+
+
+def test_validate_jd_experience_requirement(processor: JobProcessor):
+    text = "Requires 3 years of experience in software development."
+    res = processor.process_job_description(JobProcessRequest(text=text))
+    valid, reason = processor.validate_job_description(text, res)
+    assert valid is True
+
+
+def test_validate_jd_responsibilities_no_skills(processor: JobProcessor):
+    text = "Responsibilities include designing REST APIs, writing unit tests, and conducting code reviews."
+    res = processor.process_job_description(JobProcessRequest(text=text))
+    valid, reason = processor.validate_job_description(text, res)
+    assert valid is True
+
+
+def test_validate_jd_preferred_skills(processor: JobProcessor):
+    text = "Nice to have: Docker."
+    res = processor.process_job_description(JobProcessRequest(text=text))
+    valid, reason = processor.validate_job_description(text, res)
+    assert valid is True
+

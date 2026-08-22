@@ -169,10 +169,10 @@ def test_zero_or_empty_requirements(engine: MatchingEngine):
         resume=ResumeDataInput(skills=[]),
         job=JobDataInput(required_skills=[], preferred_skills=[], requirements=[])
     )
-    res = engine.match(req)
-    assert res.overall_score == 100.0
-    assert res.matched_required_skills == []
-    assert res.missing_required_skills == []
+    with pytest.raises(ValueError) as exc_info:
+        engine.match(req)
+    assert "Insufficient job description" in str(exc_info.value)
+
 
 
 # ==============================================================================
@@ -519,5 +519,104 @@ def test_score_bounding_edge_cases(engine: MatchingEngine):
     # 2. Missing requirement returns exactly 0.0
     assert rust_match.similarity_score == 0.0
     assert rust_match.best_matching_resume_evidence is None
+
+
+def test_evidence_acceptance_rules_and_qa2_regression(engine: MatchingEngine):
+    """
+    Regression test covering all 12 high-precision Evidence Acceptance Rules:
+    1. Docker absent -> no Docker evidence.
+    2. Terraform absent -> no Terraform evidence.
+    3. Linux absent -> no Linux evidence.
+    4. GCP absent -> no GCP evidence.
+    5. Azure absent -> no Azure evidence.
+    6. Kubernetes absent -> no Kubernetes evidence.
+    7. AWS present -> AWS evidence accepted.
+    8. Git present -> Git evidence accepted.
+    9. Python present -> Python evidence accepted.
+    10. Generic backend sentence supports conceptual backend/API requirements.
+    11. Job description text is never used as resume evidence.
+    12. Evidence remains an exact substring of the resume.
+    """
+    resume_text = """
+    SUMMARY
+    Software engineer with 3+ years of experience building backend APIs and web applications.
+
+    CERTIFICATIONS
+    AWS Certified Cloud Practitioner | 2024
+
+    EXPERIENCE
+    • Engineered backend microservices using Python, FastAPI, and PostgreSQL for high-traffic REST API services.
+    • Automated codebase collaboration, version control, and CI/CD pipelines using Git and GitHub.
+    """
+
+    job = JobDataInput(
+        required_skills=["AWS", "Docker", "Kubernetes", "Terraform", "Linux", "GCP", "Azure", "Git", "Python"],
+        requirements=[
+            JobRequirementDetail(skill="Docker", requirement_type="required", evidence="Docker containerization."),
+            JobRequirementDetail(skill="Terraform", requirement_type="required", evidence="Terraform infrastructure as code."),
+            JobRequirementDetail(skill="Linux", requirement_type="required", evidence="Linux system administration."),
+            JobRequirementDetail(skill="GCP", requirement_type="required", evidence="GCP cloud platform management."),
+            JobRequirementDetail(skill="Azure", requirement_type="required", evidence="Microsoft Azure cloud services."),
+            JobRequirementDetail(skill="Kubernetes", requirement_type="required", evidence="Kubernetes cluster orchestration."),
+            JobRequirementDetail(skill="AWS", requirement_type="required", evidence="AWS cloud infrastructure."),
+            JobRequirementDetail(skill="Git", requirement_type="required", evidence="Git version control."),
+            JobRequirementDetail(skill="Python", requirement_type="required", evidence="Python backend development."),
+            JobRequirementDetail(skill="", requirement_type="required", evidence="Experience in backend API development and microservices architecture."),
+        ]
+    )
+
+    req = MatchRequest(
+        resume=ResumeDataInput(
+            skills=["Python", "FastAPI", "Git", "AWS"],
+            raw_text=resume_text
+        ),
+        job=job
+    )
+
+    res = engine.match(req)
+    matches = {m.requirement_skill: m for m in res.semantic_evidence_matches}
+
+    # Assertions 1-6: Absent explicit technical skills return None / 0.0
+    assert matches["Docker"].best_matching_resume_evidence is None
+    assert matches["Docker"].similarity_score == 0.0
+
+    assert matches["Terraform"].best_matching_resume_evidence is None
+    assert matches["Terraform"].similarity_score == 0.0
+
+    assert matches["Linux"].best_matching_resume_evidence is None
+    assert matches["Linux"].similarity_score == 0.0
+
+    assert matches["GCP"].best_matching_resume_evidence is None
+    assert matches["GCP"].similarity_score == 0.0
+
+    assert matches["Azure"].best_matching_resume_evidence is None
+    assert matches["Azure"].similarity_score == 0.0
+
+    assert matches["Kubernetes"].best_matching_resume_evidence is None
+    assert matches["Kubernetes"].similarity_score == 0.0
+
+    # Assertions 7-9: Present explicit technical skills accepted
+    assert matches["AWS"].best_matching_resume_evidence == "AWS Certified Cloud Practitioner | 2024"
+    assert matches["AWS"].similarity_score > 0.50
+
+    assert "Git" in matches["Git"].best_matching_resume_evidence
+    assert matches["Git"].similarity_score > 0.50
+
+    assert "Python" in matches["Python"].best_matching_resume_evidence
+    assert matches["Python"].similarity_score > 0.50
+
+    # Assertion 10: Conceptual backend requirement accepts valid backend sentence
+    conceptual_match = next(m for m in res.semantic_evidence_matches if m.requirement_skill == "")
+    assert conceptual_match.best_matching_resume_evidence is not None
+    assert "Engineered backend microservices" in conceptual_match.best_matching_resume_evidence
+
+    # Assertions 11 & 12: Substring traceability & no JD text echo
+    normalized_resume = " ".join(resume_text.split())
+    for item in res.semantic_evidence_matches:
+        if item.best_matching_resume_evidence:
+            normalized_ev = " ".join(item.best_matching_resume_evidence.split())
+            assert normalized_ev in normalized_resume
+            assert item.best_matching_resume_evidence != item.requirement_evidence
+
 
 
